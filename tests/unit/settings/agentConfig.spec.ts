@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_AGENT_SETTINGS,
   normalizeAgentSettings,
+  resolveAgentModel,
 } from '../../../src/renderer/src/features/settings/agentConfig'
 
 describe('agent settings normalization', () => {
@@ -10,30 +11,59 @@ describe('agent settings normalization', () => {
     expect(normalizeAgentSettings('invalid')).toEqual(DEFAULT_AGENT_SETTINGS)
   })
 
-  it('keeps valid provider and model values', () => {
+  it('keeps valid provider and custom model fields', () => {
     const result = normalizeAgentSettings({
       defaultProvider: 'codex',
-      modelByProvider: {
+      customModelEnabledByProvider: {
+        'claude-code': true,
+        codex: false,
+      },
+      customModelByProvider: {
         'claude-code': 'claude-opus-4-1',
-        codex: 'o3',
+        codex: 'gpt-5.2-codex',
       },
     })
 
     expect(result.defaultProvider).toBe('codex')
-    expect(result.modelByProvider['claude-code']).toBe('claude-opus-4-1')
-    expect(result.modelByProvider.codex).toBe('o3')
+    expect(result.customModelEnabledByProvider['claude-code']).toBe(true)
+    expect(result.customModelEnabledByProvider.codex).toBe(false)
+    expect(result.customModelByProvider['claude-code']).toBe('claude-opus-4-1')
+    expect(result.customModelByProvider.codex).toBe('gpt-5.2-codex')
+    expect(resolveAgentModel(result, 'claude-code')).toBe('claude-opus-4-1')
+    expect(resolveAgentModel(result, 'codex')).toBeNull()
   })
 
-  it('falls back for unsupported model values', () => {
+  it('trims custom model and uses default when empty', () => {
     const result = normalizeAgentSettings({
       defaultProvider: 'claude-code',
-      modelByProvider: {
-        'claude-code': 'custom-model',
-        codex: 'not-in-list',
+      customModelEnabledByProvider: {
+        'claude-code': true,
+        codex: true,
+      },
+      customModelByProvider: {
+        'claude-code': '   ',
+        codex: '  gpt-5.2-codex  ',
       },
     })
 
-    expect(result.modelByProvider['claude-code']).toBe('claude-sonnet-4-5')
-    expect(result.modelByProvider.codex).toBe('gpt-5-codex')
+    expect(result.customModelByProvider['claude-code']).toBe('')
+    expect(result.customModelByProvider.codex).toBe('gpt-5.2-codex')
+    expect(resolveAgentModel(result, 'claude-code')).toBeNull()
+    expect(resolveAgentModel(result, 'codex')).toBe('gpt-5.2-codex')
+  })
+
+  it('migrates legacy modelByProvider to custom override', () => {
+    const result = normalizeAgentSettings({
+      defaultProvider: 'codex',
+      modelByProvider: {
+        'claude-code': 'claude-sonnet-4-5',
+        codex: 'gpt-5.2-codex',
+      },
+    })
+
+    expect(result.customModelEnabledByProvider['claude-code']).toBe(true)
+    expect(result.customModelEnabledByProvider.codex).toBe(true)
+    expect(result.customModelByProvider['claude-code']).toBe('claude-sonnet-4-5')
+    expect(result.customModelByProvider.codex).toBe('gpt-5.2-codex')
   })
 })

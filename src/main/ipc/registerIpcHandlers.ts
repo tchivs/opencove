@@ -3,6 +3,7 @@ import { basename, resolve } from 'node:path'
 import { IPC_CHANNELS } from '../../shared/constants/ipc'
 import type {
   KillTerminalInput,
+  ListAgentModelsInput,
   ResizeTerminalInput,
   SpawnTerminalInput,
   TerminalDataEvent,
@@ -11,6 +12,7 @@ import type {
   WriteTerminalInput,
 } from '../../shared/types/api'
 import { PtyManager } from '../infrastructure/pty/PtyManager'
+import { listAgentModels } from '../infrastructure/agent/AgentModelService'
 
 export interface IpcRegistrationDisposable {
   dispose: () => void
@@ -87,6 +89,14 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
     ptyManager.kill(payload.sessionId)
   })
 
+  ipcMain.handle(IPC_CHANNELS.agentListModels, async (_event, payload: ListAgentModelsInput) => {
+    if (!payload || (payload.provider !== 'claude-code' && payload.provider !== 'codex')) {
+      throw new Error('Invalid provider for agent:list-models')
+    }
+
+    return await listAgentModels(payload.provider)
+  })
+
   return {
     dispose: () => {
       ptyManager.disposeAll()
@@ -95,6 +105,7 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
       ipcMain.removeHandler(IPC_CHANNELS.ptyWrite)
       ipcMain.removeHandler(IPC_CHANNELS.ptyResize)
       ipcMain.removeHandler(IPC_CHANNELS.ptyKill)
+      ipcMain.removeHandler(IPC_CHANNELS.agentListModels)
     },
   }
 }

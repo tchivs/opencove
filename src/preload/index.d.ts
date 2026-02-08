@@ -1,6 +1,8 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
   KillTerminalInput,
+  ListAgentModelsInput,
+  ListAgentModelsResult,
   ResizeTerminalInput,
   SpawnTerminalInput,
   TerminalDataEvent,
@@ -22,6 +24,9 @@ export interface CoveApi {
     kill: (payload: KillTerminalInput) => Promise<void>
     onData: (listener: (event: TerminalDataEvent) => void) => UnsubscribeFn
     onExit: (listener: (event: TerminalExitEvent) => void) => UnsubscribeFn
+  }
+  agent: {
+    listModels: (payload: ListAgentModelsInput) => Promise<ListAgentModelsResult>
   }
 }
 

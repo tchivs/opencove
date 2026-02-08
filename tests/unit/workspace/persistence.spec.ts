@@ -75,7 +75,8 @@ describe('workspace persistence', () => {
     expect(restored?.workspaces).toHaveLength(1)
     expect(restored?.workspaces[0].nodes[0].title).toBe('terminal-1')
     expect(restored?.settings.defaultProvider).toBe('claude-code')
-    expect(restored?.settings.modelByProvider.codex).toBe('gpt-5-codex')
+    expect(restored?.settings.customModelEnabledByProvider.codex).toBe(false)
+    expect(restored?.settings.customModelByProvider.codex).toBe('')
   })
 
   it('falls back to default settings when persisted settings are missing', () => {
@@ -89,7 +90,8 @@ describe('workspace persistence', () => {
     const restored = readPersistedState()
     expect(restored).not.toBeNull()
     expect(restored?.settings.defaultProvider).toBe('claude-code')
-    expect(restored?.settings.modelByProvider['claude-code']).toBe('claude-sonnet-4-5')
+    expect(restored?.settings.customModelEnabledByProvider['claude-code']).toBe(false)
+    expect(restored?.settings.customModelByProvider['claude-code']).toBe('')
   })
 
   it('returns null when stored json is invalid', () => {

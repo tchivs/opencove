@@ -5,7 +5,7 @@ const electronAppPath = path.resolve(__dirname, '../../')
 const storageKey = 'cove:m0:workspace-state'
 
 test.describe('Settings', () => {
-  test('persists agent provider and model selection', async () => {
+  test('persists agent provider and custom model override', async () => {
     const electronApp = await electron.launch({
       args: [electronAppPath],
       env: {
@@ -32,16 +32,21 @@ test.describe('Settings', () => {
       await expect(defaultProvider).toBeVisible()
       await defaultProvider.selectOption('codex')
 
-      const codexModelSelect = window.locator('[data-testid="settings-model-codex"]')
-      await codexModelSelect.selectOption('o3')
+      const customModelEnabled = window.locator(
+        '[data-testid="settings-custom-model-enabled-codex"]',
+      )
+      await customModelEnabled.check()
+
+      const customModelInput = window.locator('[data-testid="settings-custom-model-input-codex"]')
+      await customModelInput.fill('gpt-5.2-codex')
 
       await window.locator('.settings-panel__close').click()
       await expect(window.locator('.workspace-sidebar__agent-provider')).toHaveText('Codex')
-      await expect(window.locator('.workspace-sidebar__agent-model')).toHaveText('o3')
+      await expect(window.locator('.workspace-sidebar__agent-model')).toHaveText('gpt-5.2-codex')
 
       await window.reload({ waitUntil: 'domcontentloaded' })
       await expect(window.locator('.workspace-sidebar__agent-provider')).toHaveText('Codex')
-      await expect(window.locator('.workspace-sidebar__agent-model')).toHaveText('o3')
+      await expect(window.locator('.workspace-sidebar__agent-model')).toHaveText('gpt-5.2-codex')
 
       const persistedSettings = await window.evaluate(key => {
         const raw = window.localStorage.getItem(key)
@@ -52,7 +57,10 @@ test.describe('Settings', () => {
         const parsed = JSON.parse(raw) as {
           settings?: {
             defaultProvider?: string
-            modelByProvider?: {
+            customModelEnabledByProvider?: {
+              codex?: boolean
+            }
+            customModelByProvider?: {
               codex?: string
             }
           }
@@ -62,7 +70,8 @@ test.describe('Settings', () => {
       }, storageKey)
 
       expect(persistedSettings?.defaultProvider).toBe('codex')
-      expect(persistedSettings?.modelByProvider?.codex).toBe('o3')
+      expect(persistedSettings?.customModelEnabledByProvider?.codex).toBe(true)
+      expect(persistedSettings?.customModelByProvider?.codex).toBe('gpt-5.2-codex')
     } finally {
       await electronApp.close()
     }

@@ -39,3 +39,24 @@ export interface TerminalExitEvent {
   sessionId: string
   exitCode: number
 }
+
+export type AgentProviderId = 'claude-code' | 'codex'
+
+export interface ListAgentModelsInput {
+  provider: AgentProviderId
+}
+
+export interface AgentModelOption {
+  id: string
+  displayName: string
+  description: string
+  isDefault: boolean
+}
+
+export interface ListAgentModelsResult {
+  provider: AgentProviderId
+  source: 'claude-api' | 'codex-cli'
+  fetchedAt: string
+  models: AgentModelOption[]
+  error: string | null
+}

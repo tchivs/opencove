@@ -7,29 +7,29 @@ export const AGENT_PROVIDER_LABEL: Record<AgentProvider, string> = {
   codex: 'Codex',
 }
 
-export const AGENT_MODEL_OPTIONS: Record<AgentProvider, readonly string[]> = {
-  'claude-code': ['claude-sonnet-4-5', 'claude-opus-4-1'],
-  codex: ['gpt-5-codex', 'o3'],
+export type AgentCustomModelEnabledByProvider = {
+  [provider in AgentProvider]: boolean
 }
 
-export type AgentModelByProvider = {
+export type AgentCustomModelByProvider = {
   [provider in AgentProvider]: string
 }
 
 export interface AgentSettings {
   defaultProvider: AgentProvider
-  modelByProvider: AgentModelByProvider
-}
-
-function defaultModelForProvider(provider: AgentProvider): string {
-  return AGENT_MODEL_OPTIONS[provider][0]
+  customModelEnabledByProvider: AgentCustomModelEnabledByProvider
+  customModelByProvider: AgentCustomModelByProvider
 }
 
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   defaultProvider: 'claude-code',
-  modelByProvider: {
-    'claude-code': defaultModelForProvider('claude-code'),
-    codex: defaultModelForProvider('codex'),
+  customModelEnabledByProvider: {
+    'claude-code': false,
+    codex: false,
+  },
+  customModelByProvider: {
+    'claude-code': '',
+    codex: '',
   },
 }
 
@@ -41,13 +41,29 @@ function isValidProvider(value: unknown): value is AgentProvider {
   return typeof value === 'string' && AGENT_PROVIDERS.includes(value as AgentProvider)
 }
 
-function normalizeModel(provider: AgentProvider, model: unknown): string {
-  const options = AGENT_MODEL_OPTIONS[provider]
-  if (typeof model === 'string' && options.includes(model)) {
-    return model
+function normalizeModelValue(model: unknown): string {
+  if (typeof model !== 'string') {
+    return ''
   }
 
-  return defaultModelForProvider(provider)
+  return model.trim()
+}
+
+function normalizeModelEnabled(value: unknown): boolean | null {
+  if (typeof value !== 'boolean') {
+    return null
+  }
+
+  return value
+}
+
+export function resolveAgentModel(settings: AgentSettings, provider: AgentProvider): string | null {
+  if (!settings.customModelEnabledByProvider[provider]) {
+    return null
+  }
+
+  const model = settings.customModelByProvider[provider].trim()
+  return model.length > 0 ? model : null
 }
 
 export function normalizeAgentSettings(value: unknown): AgentSettings {
@@ -59,15 +75,38 @@ export function normalizeAgentSettings(value: unknown): AgentSettings {
     ? value.defaultProvider
     : DEFAULT_AGENT_SETTINGS.defaultProvider
 
-  const modelByProviderInput = isRecord(value.modelByProvider) ? value.modelByProvider : {}
+  const enabledInput = isRecord(value.customModelEnabledByProvider)
+    ? value.customModelEnabledByProvider
+    : {}
 
-  const modelByProvider = AGENT_PROVIDERS.reduce<AgentModelByProvider>((acc, provider) => {
-    acc[provider] = normalizeModel(provider, modelByProviderInput[provider])
-    return acc
-  }, {} as AgentModelByProvider)
+  const customModelInput = isRecord(value.customModelByProvider) ? value.customModelByProvider : {}
+
+  const legacyModelInput = isRecord(value.modelByProvider) ? value.modelByProvider : {}
+
+  const customModelEnabledByProvider = AGENT_PROVIDERS.reduce<AgentCustomModelEnabledByProvider>(
+    (acc, provider) => {
+      const normalizedEnabled = normalizeModelEnabled(enabledInput[provider])
+      const legacyModel = normalizeModelValue(legacyModelInput[provider])
+
+      acc[provider] = normalizedEnabled === null ? legacyModel.length > 0 : normalizedEnabled
+
+      return acc
+    },
+    { ...DEFAULT_AGENT_SETTINGS.customModelEnabledByProvider },
+  )
+
+  const customModelByProvider = AGENT_PROVIDERS.reduce<AgentCustomModelByProvider>(
+    (acc, provider) => {
+      const current = customModelInput[provider] ?? legacyModelInput[provider]
+      acc[provider] = normalizeModelValue(current)
+      return acc
+    },
+    { ...DEFAULT_AGENT_SETTINGS.customModelByProvider },
+  )
 
   return {
     defaultProvider,
-    modelByProvider,
+    customModelEnabledByProvider,
+    customModelByProvider,
   }
 }

@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { SettingsPanel } from './features/settings/components/SettingsPanel'
 import {
+  AGENT_PROVIDERS,
   AGENT_PROVIDER_LABEL,
   DEFAULT_AGENT_SETTINGS,
+  resolveAgentModel,
+  type AgentProvider,
   type AgentSettings,
 } from './features/settings/agentConfig'
 import { WorkspaceCanvas } from './features/workspace/components/WorkspaceCanvas'
@@ -14,10 +17,54 @@ import {
 } from './features/workspace/utils/persistence'
 import { toRuntimeNodes } from './features/workspace/utils/nodeTransform'
 
+interface ProviderModelCatalogEntry {
+  models: string[]
+  source: string | null
+  fetchedAt: string | null
+  isLoading: boolean
+  error: string | null
+}
+
+type ProviderModelCatalog = Record<AgentProvider, ProviderModelCatalogEntry>
+
+function createInitialModelCatalog(): ProviderModelCatalog {
+  return {
+    'claude-code': {
+      models: [],
+      source: null,
+      fetchedAt: null,
+      isLoading: false,
+      error: null,
+    },
+    codex: {
+      models: [],
+      source: null,
+      fetchedAt: null,
+      isLoading: false,
+      error: null,
+    },
+  }
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  if (typeof error === 'string' && error.length > 0) {
+    return error
+  }
+
+  return 'Unknown error'
+}
+
 function App(): JSX.Element {
   const [workspaces, setWorkspaces] = useState<WorkspaceState[]>([])
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
   const [agentSettings, setAgentSettings] = useState<AgentSettings>(DEFAULT_AGENT_SETTINGS)
+  const [providerModelCatalog, setProviderModelCatalog] = useState<ProviderModelCatalog>(() =>
+    createInitialModelCatalog(),
+  )
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false)
 
@@ -39,23 +86,30 @@ function App(): JSX.Element {
       const restoredWorkspaces = await Promise.all(
         persisted.workspaces.map(async workspace => {
           const runtimeNodes = toRuntimeNodes(workspace)
-          const spawnedSessions = await Promise.all(
-            runtimeNodes.map(() =>
-              window.coveApi.pty.spawn({
+
+          const hydratedNodeResults = await Promise.allSettled(
+            runtimeNodes.map(async node => {
+              const spawned = await window.coveApi.pty.spawn({
                 cwd: workspace.path,
                 cols: 80,
                 rows: 24,
-              }),
-            ),
+              })
+
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  sessionId: spawned.sessionId,
+                },
+              }
+            }),
           )
 
-          const hydratedNodes = runtimeNodes.map((node, index) => ({
-            ...node,
-            data: {
-              ...node.data,
-              sessionId: spawnedSessions[index].sessionId,
-            },
-          }))
+          const hydratedNodes = hydratedNodeResults
+            .filter((result): result is PromiseFulfilledResult<(typeof runtimeNodes)[number]> => {
+              return result.status === 'fulfilled'
+            })
+            .map(result => result.value)
 
           return {
             id: workspace.id,
@@ -77,7 +131,7 @@ function App(): JSX.Element {
       setIsHydrated(true)
     }
 
-    void restore().catch(() => {
+    void restore().finally(() => {
       setIsHydrated(true)
     })
   }, [])
@@ -90,13 +144,67 @@ function App(): JSX.Element {
     writePersistedState(toPersistedState(workspaces, activeWorkspaceId, agentSettings))
   }, [activeWorkspaceId, agentSettings, isHydrated, workspaces])
 
+  const refreshProviderModels = useCallback(async (provider: AgentProvider): Promise<void> => {
+    setProviderModelCatalog(prev => ({
+      ...prev,
+      [provider]: {
+        ...prev[provider],
+        isLoading: true,
+        error: null,
+      },
+    }))
+
+    try {
+      const result = await window.coveApi.agent.listModels({ provider })
+      const nextModels = [...new Set(result.models.map(model => model.id))]
+
+      setProviderModelCatalog(prev => ({
+        ...prev,
+        [provider]: {
+          ...prev[provider],
+          models: nextModels,
+          source: result.source,
+          fetchedAt: result.fetchedAt,
+          error: result.error,
+          isLoading: false,
+        },
+      }))
+    } catch (error) {
+      setProviderModelCatalog(prev => ({
+        ...prev,
+        [provider]: {
+          ...prev[provider],
+          isLoading: false,
+          fetchedAt: new Date().toISOString(),
+          error: toErrorMessage(error),
+        },
+      }))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isSettingsOpen) {
+      return
+    }
+
+    for (const provider of AGENT_PROVIDERS) {
+      const entry = providerModelCatalog[provider]
+      if (entry.fetchedAt !== null || entry.isLoading) {
+        continue
+      }
+
+      void refreshProviderModels(provider)
+    }
+  }, [isSettingsOpen, providerModelCatalog, refreshProviderModels])
+
   const activeWorkspace = useMemo(
     () => workspaces.find(workspace => workspace.id === activeWorkspaceId) ?? null,
     [activeWorkspaceId, workspaces],
   )
 
   const activeProviderLabel = AGENT_PROVIDER_LABEL[agentSettings.defaultProvider]
-  const activeProviderModel = agentSettings.modelByProvider[agentSettings.defaultProvider]
+  const activeProviderModel =
+    resolveAgentModel(agentSettings, agentSettings.defaultProvider) ?? 'Default (Follow CLI)'
 
   const handleAddWorkspace = async (): Promise<void> => {
     const selected = await window.coveApi.workspace.selectDirectory()
@@ -213,6 +321,10 @@ function App(): JSX.Element {
       {isSettingsOpen ? (
         <SettingsPanel
           settings={agentSettings}
+          modelCatalogByProvider={providerModelCatalog}
+          onRefreshProviderModels={provider => {
+            void refreshProviderModels(provider)
+          }}
           onChange={next => {
             setAgentSettings(next)
           }}

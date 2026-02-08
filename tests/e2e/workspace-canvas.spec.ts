@@ -10,6 +10,7 @@ import path from 'path'
 const electronAppPath = path.resolve(__dirname, '../../')
 const testWorkspacePath = path.resolve(__dirname, '../../')
 const storageKey = 'cove:m0:workspace-state'
+const seededWorkspaceId = 'workspace-seeded'
 
 interface SeedNode {
   id: string
@@ -40,10 +41,10 @@ async function launchApp(): Promise<{ electronApp: ElectronApplication; window: 
 
 async function clearAndSeedWorkspace(window: Page, nodes: SeedNode[]): Promise<void> {
   const seededState = {
-    activeWorkspaceId: 'workspace-seeded',
+    activeWorkspaceId: seededWorkspaceId,
     workspaces: [
       {
-        id: 'workspace-seeded',
+        id: seededWorkspaceId,
         name: path.basename(testWorkspacePath),
         path: testWorkspacePath,
         nodes,
@@ -51,17 +52,60 @@ async function clearAndSeedWorkspace(window: Page, nodes: SeedNode[]): Promise<v
     ],
   }
 
-  await window.evaluate(
-    ({ key, state }) => {
-      window.localStorage.setItem(key, JSON.stringify(state))
-    },
-    {
-      key: storageKey,
-      state: seededState,
-    },
-  )
+  const trySeed = async (attempt: number): Promise<boolean> => {
+    if (attempt >= 3) {
+      return false
+    }
 
-  await window.reload({ waitUntil: 'domcontentloaded' })
+    await window.evaluate(
+      ({ key, state }) => {
+        window.localStorage.setItem(key, JSON.stringify(state))
+      },
+      {
+        key: storageKey,
+        state: seededState,
+      },
+    )
+
+    await window.reload({ waitUntil: 'domcontentloaded' })
+
+    const seededReady = await window.evaluate(
+      ({ key, workspaceId }) => {
+        const raw = window.localStorage.getItem(key)
+        if (!raw) {
+          return false
+        }
+
+        try {
+          const parsed = JSON.parse(raw) as {
+            workspaces?: Array<{
+              id?: string
+            }>
+          }
+
+          return parsed.workspaces?.some(workspace => workspace.id === workspaceId) ?? false
+        } catch {
+          return false
+        }
+      },
+      {
+        key: storageKey,
+        workspaceId: seededWorkspaceId,
+      },
+    )
+
+    const workspaceCount = await window.locator('.workspace-item').count()
+    if (seededReady && workspaceCount > 0) {
+      return true
+    }
+
+    return await trySeed(attempt + 1)
+  }
+
+  const success = await trySeed(0)
+  if (!success) {
+    throw new Error('Failed to deterministically seed workspace state')
+  }
 }
 
 test.describe('Workspace Canvas Interactions', () => {

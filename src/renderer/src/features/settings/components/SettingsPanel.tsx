@@ -1,18 +1,34 @@
 import {
-  AGENT_MODEL_OPTIONS,
   AGENT_PROVIDER_LABEL,
   AGENT_PROVIDERS,
+  resolveAgentModel,
   type AgentProvider,
   type AgentSettings,
 } from '../agentConfig'
 
+interface ProviderModelCatalogEntry {
+  models: string[]
+  source: string | null
+  fetchedAt: string | null
+  isLoading: boolean
+  error: string | null
+}
+
 interface SettingsPanelProps {
   settings: AgentSettings
+  modelCatalogByProvider: Record<AgentProvider, ProviderModelCatalogEntry>
+  onRefreshProviderModels: (provider: AgentProvider) => void
   onChange: (settings: AgentSettings) => void
   onClose: () => void
 }
 
-export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProps): JSX.Element {
+export function SettingsPanel({
+  settings,
+  modelCatalogByProvider,
+  onRefreshProviderModels,
+  onChange,
+  onClose,
+}: SettingsPanelProps): JSX.Element {
   const updateDefaultProvider = (provider: AgentProvider): void => {
     onChange({
       ...settings,
@@ -20,17 +36,28 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
     })
   }
 
-  const updateProviderModel = (provider: AgentProvider, model: string): void => {
+  const updateProviderCustomModelEnabled = (provider: AgentProvider, enabled: boolean): void => {
     onChange({
       ...settings,
-      modelByProvider: {
-        ...settings.modelByProvider,
+      customModelEnabledByProvider: {
+        ...settings.customModelEnabledByProvider,
+        [provider]: enabled,
+      },
+    })
+  }
+
+  const updateProviderCustomModel = (provider: AgentProvider, model: string): void => {
+    onChange({
+      ...settings,
+      customModelByProvider: {
+        ...settings.customModelByProvider,
         [provider]: model,
       },
     })
   }
 
-  const selectedModel = settings.modelByProvider[settings.defaultProvider]
+  const selectedModel =
+    resolveAgentModel(settings, settings.defaultProvider) ?? 'Default (Follow CLI)'
 
   return (
     <div
@@ -76,25 +103,80 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
         </div>
 
         <div className="settings-panel__section">
-          <h3>Model By Provider</h3>
-          {AGENT_PROVIDERS.map(provider => (
-            <div className="settings-panel__row" key={provider}>
-              <span>{AGENT_PROVIDER_LABEL[provider]}</span>
-              <select
-                data-testid={`settings-model-${provider}`}
-                value={settings.modelByProvider[provider]}
-                onChange={event => {
-                  updateProviderModel(provider, event.target.value)
-                }}
-              >
-                {AGENT_MODEL_OPTIONS[provider].map(model => (
-                  <option value={model} key={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ))}
+          <h3>Model Override</h3>
+          {AGENT_PROVIDERS.map(provider => {
+            const modelCatalog = modelCatalogByProvider[provider]
+            const customEnabled = settings.customModelEnabledByProvider[provider]
+            const customModel = settings.customModelByProvider[provider]
+            const modelListId = `settings-provider-model-list-${provider}`
+
+            return (
+              <article className="settings-provider-card" key={provider}>
+                <div className="settings-provider-card__header">
+                  <strong>{AGENT_PROVIDER_LABEL[provider]}</strong>
+                  <button
+                    type="button"
+                    className="settings-provider-card__refresh"
+                    disabled={modelCatalog.isLoading}
+                    onClick={() => {
+                      onRefreshProviderModels(provider)
+                    }}
+                  >
+                    {modelCatalog.isLoading ? 'Refreshing...' : 'Refresh Models'}
+                  </button>
+                </div>
+
+                <label className="settings-provider-card__toggle">
+                  <input
+                    type="checkbox"
+                    data-testid={`settings-custom-model-enabled-${provider}`}
+                    checked={customEnabled}
+                    onChange={event => {
+                      updateProviderCustomModelEnabled(provider, event.target.checked)
+                    }}
+                  />
+                  <span>Use custom model (unchecked = follow CLI default)</span>
+                </label>
+
+                <input
+                  type="text"
+                  list={modelListId}
+                  data-testid={`settings-custom-model-input-${provider}`}
+                  value={customModel}
+                  disabled={!customEnabled}
+                  placeholder={
+                    provider === 'codex' ? 'Example: gpt-5.2-codex' : 'Example: claude-sonnet-4-5'
+                  }
+                  onChange={event => {
+                    updateProviderCustomModel(provider, event.target.value)
+                  }}
+                />
+
+                <datalist id={modelListId}>
+                  {modelCatalog.models.map(model => (
+                    <option value={model} key={model}>
+                      {model}
+                    </option>
+                  ))}
+                </datalist>
+
+                <div className="settings-provider-card__meta">
+                  <span>
+                    Source: {modelCatalog.source ?? 'N/A'} · {modelCatalog.models.length} models
+                  </span>
+                  {modelCatalog.error ? (
+                    <span className="settings-provider-card__error">
+                      Error: {modelCatalog.error}
+                    </span>
+                  ) : modelCatalog.fetchedAt ? (
+                    <span>Updated: {new Date(modelCatalog.fetchedAt).toLocaleTimeString()}</span>
+                  ) : (
+                    <span>Waiting for first fetch...</span>
+                  )}
+                </div>
+              </article>
+            )
+          })}
         </div>
 
         <p className="settings-panel__hint">

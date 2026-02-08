@@ -3,6 +3,8 @@ import { electronAPI } from '@electron-toolkit/preload'
 import { IPC_CHANNELS } from '../shared/constants/ipc'
 import type {
   KillTerminalInput,
+  ListAgentModelsInput,
+  ListAgentModelsResult,
   ResizeTerminalInput,
   SpawnTerminalInput,
   TerminalDataEvent,
@@ -50,6 +52,10 @@ const coveApi = {
         ipcRenderer.removeListener(IPC_CHANNELS.ptyExit, handler)
       }
     },
+  },
+  agent: {
+    listModels: (payload: ListAgentModelsInput): Promise<ListAgentModelsResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.agentListModels, payload),
   },
 }
 

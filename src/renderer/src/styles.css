@@ -209,7 +209,9 @@ body {
 }
 
 .settings-panel {
-  width: min(560px, calc(100vw - 48px));
+  width: min(620px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
   border: 1px solid rgba(123, 157, 255, 0.35);
   border-radius: 14px;
   padding: 18px;
@@ -251,12 +253,65 @@ body {
 }
 
 .settings-panel__section select,
+.settings-panel__section input,
 .settings-panel__row select {
   border: 1px solid rgba(96, 130, 223, 0.55);
   background: rgba(10, 18, 35, 0.85);
   color: #eaf2ff;
   border-radius: 8px;
   padding: 8px 10px;
+}
+
+.settings-provider-card {
+  border: 1px solid rgba(96, 130, 223, 0.35);
+  border-radius: 10px;
+  background: rgba(12, 20, 38, 0.75);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-provider-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-provider-card__header strong {
+  font-size: 13px;
+  color: #d8e6ff;
+}
+
+.settings-provider-card__refresh:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.settings-provider-card__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #bad0f9;
+}
+
+.settings-provider-card__toggle input {
+  width: 14px;
+  height: 14px;
+}
+
+.settings-provider-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #93aeda;
+}
+
+.settings-provider-card__error {
+  color: #ffb2b2;
 }
 
 .settings-panel__row {
