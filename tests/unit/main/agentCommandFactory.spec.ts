@@ -70,6 +70,20 @@ describe('buildAgentLaunchCommand', () => {
     expect(command.launchMode).toBe('resume')
   })
 
+  it('falls back to --continue when claude resumeSessionId is invalid', () => {
+    const command = buildAgentLaunchCommand({
+      provider: 'claude-code',
+      mode: 'resume',
+      prompt: '',
+      model: null,
+      resumeSessionId: 'agent-a5170af',
+    })
+
+    expect(command.command).toBe('claude')
+    expect(command.args).toEqual(['--dangerously-skip-permissions', '--continue'])
+    expect(command.resumeSessionId).toBeNull()
+  })
+
   it('rejects empty prompt when launching a new session', () => {
     expect(() =>
       buildAgentLaunchCommand({

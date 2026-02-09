@@ -16,6 +16,8 @@ export interface AgentLaunchCommand {
   resumeSessionId: string | null
 }
 
+const CLAUDE_SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 function normalizeOptionalValue(value: string | null | undefined): string | null {
   if (typeof value !== 'string') {
     return null
@@ -23,6 +25,14 @@ function normalizeOptionalValue(value: string | null | undefined): string | null
 
   const normalized = value.trim()
   return normalized.length > 0 ? normalized : null
+}
+
+function normalizeClaudeResumeSessionId(value: string | null): string | null {
+  if (!value) {
+    return null
+  }
+
+  return CLAUDE_SESSION_ID_PATTERN.test(value) ? value : null
 }
 
 function normalizePrompt(value: string | undefined): string {
@@ -37,9 +47,10 @@ function normalizePrompt(value: string | undefined): string {
 
 export function buildAgentLaunchCommand(input: BuildAgentLaunchCommandInput): AgentLaunchCommand {
   const effectiveModel = normalizeOptionalValue(input.model)
-  const resumeSessionId = normalizeOptionalValue(input.resumeSessionId)
+  const normalizedResumeSessionId = normalizeOptionalValue(input.resumeSessionId)
 
   if (input.provider === 'claude-code') {
+    const resumeSessionId = normalizeClaudeResumeSessionId(normalizedResumeSessionId)
     const args = ['--dangerously-skip-permissions']
 
     if (effectiveModel) {
@@ -76,8 +87,8 @@ export function buildAgentLaunchCommand(input: BuildAgentLaunchCommandInput): Ag
   if (input.mode === 'resume') {
     const args = ['resume']
 
-    if (resumeSessionId) {
-      args.push(resumeSessionId)
+    if (normalizedResumeSessionId) {
+      args.push(normalizedResumeSessionId)
     } else {
       args.push('--last')
     }
@@ -91,7 +102,7 @@ export function buildAgentLaunchCommand(input: BuildAgentLaunchCommandInput): Ag
       args,
       launchMode: 'resume',
       effectiveModel,
-      resumeSessionId,
+      resumeSessionId: normalizedResumeSessionId,
     }
   }
 

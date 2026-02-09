@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
-import { basename, extname, join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import type { AgentProviderId } from '../../../shared/types/api'
 
 interface LocateAgentResumeSessionInput {
@@ -12,6 +12,8 @@ interface LocateAgentResumeSessionInput {
 
 const POLL_INTERVAL_MS = 200
 const DEFAULT_TIMEOUT_MS = 2600
+const CLAUDE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const CLAUDE_SESSION_SCAN_LINE_LIMIT = 32
 
 function toDateDirectoryParts(timestampMs: number): [string, string, string] {
   const date = new Date(timestampMs)
@@ -27,6 +29,15 @@ function wait(durationMs: number): Promise<void> {
   })
 }
 
+function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
 async function listFiles(directory: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(directory, { withFileTypes: true })
@@ -36,13 +47,82 @@ async function listFiles(directory: string): Promise<string[]> {
   }
 }
 
-function normalizeSessionIdFromPath(filePath: string): string | null {
-  if (extname(filePath) !== '.jsonl') {
+function parseClaudeSessionIdFromFilePath(filePath: string): string | null {
+  if (!filePath.endsWith('.jsonl')) {
     return null
   }
 
-  const name = basename(filePath, '.jsonl').trim()
-  return name.length > 0 ? name : null
+  const fileName = basename(filePath, '.jsonl').trim()
+  if (!CLAUDE_UUID_PATTERN.test(fileName)) {
+    return null
+  }
+
+  return fileName
+}
+
+function parseJsonObject(line: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(line) as unknown
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null
+  } catch {
+    return null
+  }
+}
+
+function extractClaudeSessionId(record: Record<string, unknown>): string | null {
+  const directSessionId = normalizeOptionalString(record.sessionId)
+  if (directSessionId) {
+    return directSessionId
+  }
+
+  const payload =
+    typeof record.payload === 'object' && record.payload !== null
+      ? (record.payload as Record<string, unknown>)
+      : null
+
+  const payloadSessionId = normalizeOptionalString(payload?.sessionId)
+  if (payloadSessionId) {
+    return payloadSessionId
+  }
+
+  return null
+}
+
+async function readClaudeSessionId(filePath: string): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(filePath, 'utf8')
+    const lines = raw.split('\n')
+
+    let inspectedLineCount = 0
+    for (const line of lines) {
+      if (inspectedLineCount >= CLAUDE_SESSION_SCAN_LINE_LIMIT) {
+        break
+      }
+
+      const trimmed = line.trim()
+      if (trimmed.length === 0) {
+        continue
+      }
+
+      inspectedLineCount += 1
+
+      const record = parseJsonObject(trimmed)
+      if (!record) {
+        continue
+      }
+
+      const sessionId = extractClaudeSessionId(record)
+      if (sessionId) {
+        return sessionId
+      }
+    }
+  } catch {
+    return parseClaudeSessionIdFromFilePath(filePath)
+  }
+
+  return parseClaudeSessionIdFromFilePath(filePath)
 }
 
 async function readFirstLine(filePath: string): Promise<string | null> {
@@ -69,8 +149,18 @@ async function findClaudeResumeSessionId(cwd: string, startedAtMs: number): Prom
     files.map(async file => {
       try {
         const stats = await fs.stat(file)
+
+        if (stats.mtimeMs < startedAtMs - 6000) {
+          return null
+        }
+
+        const sessionId = await readClaudeSessionId(file)
+        if (!sessionId) {
+          return null
+        }
+
         return {
-          file,
+          sessionId,
           mtimeMs: stats.mtimeMs,
         }
       } catch {
@@ -80,15 +170,10 @@ async function findClaudeResumeSessionId(cwd: string, startedAtMs: number): Prom
   )
 
   const latest = candidates
-    .filter((item): item is { file: string; mtimeMs: number } => item !== null)
-    .filter(item => item.mtimeMs >= startedAtMs - 6000)
+    .filter((item): item is { sessionId: string; mtimeMs: number } => item !== null)
     .sort((a, b) => b.mtimeMs - a.mtimeMs)[0]
 
-  if (!latest) {
-    return null
-  }
-
-  return normalizeSessionIdFromPath(latest.file)
+  return latest?.sessionId ?? null
 }
 
 async function findCodexResumeSessionId(cwd: string, startedAtMs: number): Promise<string | null> {
