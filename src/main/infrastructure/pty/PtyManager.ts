@@ -12,8 +12,11 @@ export interface SpawnPtyOptions {
   rows: number
 }
 
+const MAX_SNAPSHOT_CHARS = 400_000
+
 export class PtyManager {
   private sessions = new Map<string, IPty>()
+  private snapshots = new Map<string, string>()
 
   public spawnSession(options: SpawnPtyOptions): { sessionId: string; pty: IPty } {
     const sessionId = crypto.randomUUID()
@@ -29,8 +32,29 @@ export class PtyManager {
     })
 
     this.sessions.set(sessionId, pty)
+    this.snapshots.set(sessionId, '')
 
     return { sessionId, pty }
+  }
+
+  public appendSnapshotData(sessionId: string, data: string): void {
+    if (!this.sessions.has(sessionId)) {
+      return
+    }
+
+    const previous = this.snapshots.get(sessionId) ?? ''
+    const next = previous + data
+
+    if (next.length <= MAX_SNAPSHOT_CHARS) {
+      this.snapshots.set(sessionId, next)
+      return
+    }
+
+    this.snapshots.set(sessionId, next.slice(-MAX_SNAPSHOT_CHARS))
+  }
+
+  public snapshot(sessionId: string): string {
+    return this.snapshots.get(sessionId) ?? ''
   }
 
   public write(sessionId: string, data: string): void {
@@ -59,16 +83,19 @@ export class PtyManager {
 
     pty.kill()
     this.sessions.delete(sessionId)
+    this.snapshots.delete(sessionId)
   }
 
   public delete(sessionId: string): void {
     this.sessions.delete(sessionId)
+    this.snapshots.delete(sessionId)
   }
 
   public disposeAll(): void {
     for (const [sessionId, pty] of this.sessions.entries()) {
       pty.kill()
       this.sessions.delete(sessionId)
+      this.snapshots.delete(sessionId)
     }
   }
 

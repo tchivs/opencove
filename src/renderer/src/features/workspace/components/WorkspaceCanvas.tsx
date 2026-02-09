@@ -164,6 +164,7 @@ function WorkspaceCanvasInner({
       const nextNodes = updater(nodesRef.current)
       nodesRef.current = nextNodes
       onNodesChange(nextNodes)
+      window.dispatchEvent(new Event('cove:terminal-layout-sync'))
     },
     [onNodesChange],
   )
@@ -1217,8 +1218,23 @@ function WorkspaceCanvasInner({
         })
       }
 
+      const shouldSyncLayout = changes.some(change => {
+        if (change.type === 'remove') {
+          return true
+        }
+
+        if (change.type === 'position') {
+          return !change.dragging
+        }
+
+        return change.type !== 'select'
+      })
+
       nodesRef.current = nextNodes
       onNodesChange(nextNodes)
+      if (shouldSyncLayout) {
+        window.dispatchEvent(new Event('cove:terminal-layout-sync'))
+      }
     },
     [normalizePosition, onNodesChange],
   )

@@ -22,6 +22,7 @@ interface TerminalNodeProps {
 
 const MIN_WIDTH = 320
 const MIN_HEIGHT = 220
+const TERMINAL_LAYOUT_SYNC_EVENT = 'cove:terminal-layout-sync'
 
 function getStatusLabel(status: AgentRuntimeStatus | null): string {
   switch (status) {
@@ -86,11 +87,24 @@ export function TerminalNode({
   const syncTerminalSize = useCallback(() => {
     const terminal = terminalRef.current
     const fitAddon = fitAddonRef.current
-    if (!terminal || !fitAddon) {
+    const container = containerRef.current
+
+    if (!terminal || !fitAddon || !container) {
+      return
+    }
+
+    if (container.clientWidth <= 2 || container.clientHeight <= 2) {
       return
     }
 
     fitAddon.fit()
+
+    if (terminal.cols <= 0 || terminal.rows <= 0) {
+      return
+    }
+
+    terminal.refresh(0, Math.max(0, terminal.rows - 1))
+
     void window.coveApi.pty.resize({
       sessionId,
       cols: terminal.cols,
@@ -110,6 +124,7 @@ export function TerminalNode({
       },
       allowProposedApi: true,
       convertEol: true,
+      scrollback: 5000,
     })
 
     const fitAddon = new FitAddon()
@@ -127,33 +142,94 @@ export function TerminalNode({
       void window.coveApi.pty.write({ sessionId, data })
     })
 
-    const unsubscribeData = window.coveApi.pty.onData(event => {
-      if (event.sessionId !== sessionId) {
+    let unsubscribeData: (() => void) | null = null
+    let unsubscribeExit: (() => void) | null = null
+    let isDisposed = false
+
+    const bindSessionEvents = () => {
+      unsubscribeData = window.coveApi.pty.onData(event => {
+        if (event.sessionId !== sessionId) {
+          return
+        }
+
+        terminal.write(event.data)
+      })
+
+      unsubscribeExit = window.coveApi.pty.onExit(event => {
+        if (event.sessionId !== sessionId) {
+          return
+        }
+
+        terminal.writeln(`\r\n[process exited with code ${event.exitCode}]`)
+      })
+    }
+
+    const hydrateFromSnapshot = async () => {
+      try {
+        const snapshot = await window.coveApi.pty.snapshot({ sessionId })
+        if (!isDisposed && snapshot.data.length > 0) {
+          terminal.write(snapshot.data)
+        }
+      } catch {
+        // ignore snapshot read failures and continue with live stream
+      }
+
+      if (isDisposed) {
         return
       }
 
-      terminal.write(event.data)
+      bindSessionEvents()
+      syncTerminalSize()
+    }
+
+    void hydrateFromSnapshot()
+
+    const resizeObserver = new ResizeObserver(() => {
+      syncTerminalSize()
     })
 
-    const unsubscribeExit = window.coveApi.pty.onExit(event => {
-      if (event.sessionId !== sessionId) {
-        return
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncTerminalSize()
       }
+    }
 
-      terminal.writeln(`\r\n[process exited with code ${event.exitCode}]`)
-    })
+    const handleWindowFocus = () => {
+      syncTerminalSize()
+    }
+
+    const handleLayoutSync = () => {
+      syncTerminalSize()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleWindowFocus)
+    window.addEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync)
 
     return () => {
+      isDisposed = true
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleWindowFocus)
+      window.removeEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync)
+      resizeObserver.disconnect()
       disposable.dispose()
-      unsubscribeData()
-      unsubscribeExit()
+      unsubscribeData?.()
+      unsubscribeExit?.()
       terminal.dispose()
+      terminalRef.current = null
+      fitAddonRef.current = null
     }
   }, [sessionId, syncTerminalSize])
 
   useEffect(() => {
     const frame = requestAnimationFrame(syncTerminalSize)
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(frame)
+    }
   }, [height, syncTerminalSize, width])
 
   const handleResizePointerDown = useCallback(
@@ -194,6 +270,7 @@ export function TerminalNode({
     const handlePointerUp = () => {
       setIsResizing(false)
       resizeStartRef.current = null
+      syncTerminalSize()
     }
 
     window.addEventListener('pointermove', handlePointerMove)
@@ -203,7 +280,7 @@ export function TerminalNode({
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-  }, [isResizing, onResize])
+  }, [isResizing, onResize, syncTerminalSize])
 
   const isAgentNode = kind === 'agent'
   const canStop =
@@ -215,7 +292,7 @@ export function TerminalNode({
     <div
       className="terminal-node nowheel"
       style={sizeStyle}
-      onWheelCapture={event => {
+      onWheel={event => {
         event.stopPropagation()
       }}
     >

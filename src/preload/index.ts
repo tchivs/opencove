@@ -9,6 +9,8 @@ import type {
   ListAgentModelsInput,
   ListAgentModelsResult,
   ResizeTerminalInput,
+  SnapshotTerminalInput,
+  SnapshotTerminalResult,
   SpawnTerminalInput,
   SuggestTaskTitleInput,
   SuggestTaskTitleResult,
@@ -37,6 +39,8 @@ const coveApi = {
       ipcRenderer.invoke(IPC_CHANNELS.ptyResize, payload),
     kill: (payload: KillTerminalInput): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.ptyKill, payload),
+    snapshot: (payload: SnapshotTerminalInput): Promise<SnapshotTerminalResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ptySnapshot, payload),
     onData: (listener: (event: TerminalDataEvent) => void): UnsubscribeFn => {
       const handler = (_event: Electron.IpcRendererEvent, payload: TerminalDataEvent) => {
         listener(payload)

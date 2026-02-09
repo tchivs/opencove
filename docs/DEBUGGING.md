@@ -89,3 +89,38 @@ pnpm test:e2e
 2. `TerminalNode` 是否仅在 `sessionId` 变化时重建 xterm 实例。
 3. 拖拽/缩放是否只更新位置和尺寸，而不是替换节点身份。
 4. 当前 E2E 是否跑的是最新 `out/` 构建产物。
+
+## 终端历史与滚轮专项
+
+### 症状 1：切换 workspace 再切回，旧输出消失（新输入还能出现）
+
+根因通常是：渲染进程切换 workspace 时会卸载终端组件，期间 PTY 仍在输出；如果主进程没有输出快照缓存，重新挂载后只能看到“重新订阅后”的新输出。
+
+排查点：
+
+1. 主进程 PTY 管理器是否维护会话输出快照（ring buffer）。
+2. 是否提供 `pty:snapshot` IPC。
+3. 终端组件挂载时是否先 `snapshot` 回放，再绑定 `onData`/`onExit`。
+
+快速验证：
+
+- 在终端执行 `echo <token>`；
+- 切换到其他 workspace，再切回；
+- 不按回车时也应仍能看到 `<token>`。
+
+对应用例：
+
+- `tests/e2e/workspace-canvas.spec.ts` 中 `preserves terminal history after workspace switch`。
+
+### 症状 2：鼠标在终端上滚轮，画布不缩放但终端也不滚动
+
+常见原因是对终端容器使用了 `onWheelCapture + stopPropagation`，会阻断事件到达 xterm viewport。
+
+修复策略：
+
+- 改为 `onWheel`（冒泡阶段）里 `stopPropagation`；
+- 保留 xterm 默认滚动行为，同时阻断 ReactFlow 的缩放处理。
+
+对应用例：
+
+- `tests/e2e/workspace-canvas.spec.ts` 中 `wheel over terminal scrolls terminal viewport`。

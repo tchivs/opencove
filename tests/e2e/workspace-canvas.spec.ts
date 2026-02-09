@@ -43,6 +43,13 @@ interface SeedNode {
   agent?: SeedAgentData | null
 }
 
+interface SeedWorkspace {
+  id: string
+  name: string
+  path: string
+  nodes: SeedNode[]
+}
+
 async function launchApp(): Promise<{ electronApp: ElectronApplication; window: Page }> {
   const electronApp = await electron.launch({
     args: [electronAppPath],
@@ -59,24 +66,18 @@ async function launchApp(): Promise<{ electronApp: ElectronApplication; window: 
   return { electronApp, window }
 }
 
-async function clearAndSeedWorkspace(
+async function seedWorkspaceState(
   window: Page,
-  nodes: SeedNode[],
-  options?: {
+  payload: {
+    activeWorkspaceId: string
+    workspaces: SeedWorkspace[]
     settings?: unknown
   },
 ): Promise<void> {
   const seededState = {
-    activeWorkspaceId: seededWorkspaceId,
-    workspaces: [
-      {
-        id: seededWorkspaceId,
-        name: path.basename(testWorkspacePath),
-        path: testWorkspacePath,
-        nodes,
-      },
-    ],
-    ...(options?.settings ? { settings: options.settings } : {}),
+    activeWorkspaceId: payload.activeWorkspaceId,
+    workspaces: payload.workspaces,
+    ...(payload.settings ? { settings: payload.settings } : {}),
   }
 
   const trySeed = async (attempt: number): Promise<boolean> => {
@@ -97,7 +98,7 @@ async function clearAndSeedWorkspace(
     await window.reload({ waitUntil: 'domcontentloaded' })
 
     const seededReady = await window.evaluate(
-      ({ key, workspaceId }) => {
+      ({ key, workspaceIds }) => {
         const raw = window.localStorage.getItem(key)
         if (!raw) {
           return false
@@ -110,19 +111,29 @@ async function clearAndSeedWorkspace(
             }>
           }
 
-          return parsed.workspaces?.some(workspace => workspace.id === workspaceId) ?? false
+          if (!Array.isArray(parsed.workspaces)) {
+            return false
+          }
+
+          const loadedIds = new Set(
+            parsed.workspaces
+              .map(workspace => (typeof workspace.id === 'string' ? workspace.id : ''))
+              .filter(id => id.length > 0),
+          )
+
+          return workspaceIds.every(workspaceId => loadedIds.has(workspaceId))
         } catch {
           return false
         }
       },
       {
         key: storageKey,
-        workspaceId: seededWorkspaceId,
+        workspaceIds: payload.workspaces.map(workspace => workspace.id),
       },
     )
 
     const workspaceCount = await window.locator('.workspace-item').count()
-    if (seededReady && workspaceCount > 0) {
+    if (seededReady && workspaceCount >= payload.workspaces.length) {
       return true
     }
 
@@ -133,6 +144,27 @@ async function clearAndSeedWorkspace(
   if (!success) {
     throw new Error('Failed to deterministically seed workspace state')
   }
+}
+
+async function clearAndSeedWorkspace(
+  window: Page,
+  nodes: SeedNode[],
+  options?: {
+    settings?: unknown
+  },
+): Promise<void> {
+  await seedWorkspaceState(window, {
+    activeWorkspaceId: seededWorkspaceId,
+    workspaces: [
+      {
+        id: seededWorkspaceId,
+        name: path.basename(testWorkspacePath),
+        path: testWorkspacePath,
+        nodes,
+      },
+    ],
+    settings: options?.settings,
+  })
 }
 
 test.describe('Workspace Canvas Interactions', () => {
@@ -258,6 +290,107 @@ test.describe('Workspace Canvas Interactions', () => {
     }
   })
 
+  test('preserves terminal history after workspace switch', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await seedWorkspaceState(window, {
+        activeWorkspaceId: 'workspace-a',
+        workspaces: [
+          {
+            id: 'workspace-a',
+            name: 'workspace-a',
+            path: testWorkspacePath,
+            nodes: [
+              {
+                id: 'node-a',
+                title: 'terminal-a',
+                position: { x: 120, y: 120 },
+                width: 460,
+                height: 300,
+              },
+            ],
+          },
+          {
+            id: 'workspace-b',
+            name: 'workspace-b',
+            path: testWorkspacePath,
+            nodes: [
+              {
+                id: 'node-b',
+                title: 'terminal-b',
+                position: { x: 160, y: 160 },
+                width: 460,
+                height: 300,
+              },
+            ],
+          },
+        ],
+      })
+
+      const terminal = window.locator('.terminal-node').first()
+      await expect(terminal).toBeVisible()
+      await expect(terminal.locator('.xterm')).toBeVisible()
+
+      const token = `COVE_PERSIST_${Date.now()}`
+      await terminal.locator('.xterm').click()
+      await window.keyboard.type(`echo ${token}`)
+      await window.keyboard.press('Enter')
+      await expect(terminal).toContainText(token)
+
+      await window.locator('.workspace-item').nth(1).click()
+      await expect(window.locator('.workspace-item').nth(1)).toHaveClass(/workspace-item--active/)
+      await expect(window.locator('.terminal-node')).toHaveCount(1)
+
+      await window.locator('.workspace-item').nth(0).click()
+      await expect(window.locator('.workspace-item').nth(0)).toHaveClass(/workspace-item--active/)
+      await expect(window.locator('.terminal-node')).toHaveCount(1)
+      await expect(window.locator('.terminal-node').first()).toContainText(token)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('wheel over terminal scrolls terminal viewport', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(window, [
+        {
+          id: 'node-scroll',
+          title: 'terminal-scroll',
+          position: { x: 120, y: 120 },
+          width: 460,
+          height: 300,
+        },
+      ])
+
+      const terminal = window.locator('.terminal-node').first()
+      await expect(terminal).toBeVisible()
+      await terminal.locator('.xterm').click()
+      await window.keyboard.type(
+        'i=1; while [ $i -le 260 ]; do echo COVE_SCROLL_$i; i=$((i+1)); done',
+      )
+      await window.keyboard.press('Enter')
+      await expect(terminal).toContainText('COVE_SCROLL_260')
+
+      const viewport = terminal.locator('.xterm-viewport')
+      await expect(viewport).toBeVisible()
+
+      const visibleRows = terminal.locator('.xterm-rows')
+      const beforeRows = await visibleRows.innerText()
+
+      await terminal.hover()
+      await window.mouse.wheel(0, -1200)
+      await window.waitForTimeout(120)
+
+      const afterRows = await visibleRows.innerText()
+      expect(afterRows).not.toBe(beforeRows)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
   test('runs agent from launcher v2 and creates node', async () => {
     const { electronApp, window } = await launchApp()
 
@@ -306,6 +439,10 @@ test.describe('Workspace Canvas Interactions', () => {
 
       await expect(window.locator('.terminal-node')).toHaveCount(1)
       await expect(window.locator('.terminal-node__title').first()).toContainText('gpt-5.2-codex')
+      await expect(window.locator('.terminal-node').first().locator('.xterm')).toBeVisible()
+      await expect(window.locator('.terminal-node').first()).toContainText(
+        '[cove-test-agent] codex new',
+      )
       await expect(window.locator('.workspace-agent-item')).toHaveCount(1)
     } finally {
       await electronApp.close()

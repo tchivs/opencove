@@ -34,6 +34,14 @@ export interface KillTerminalInput {
   sessionId: string
 }
 
+export interface SnapshotTerminalInput {
+  sessionId: string
+}
+
+export interface SnapshotTerminalResult {
+  data: string
+}
+
 export interface TerminalDataEvent {
   sessionId: string
   data: string

@@ -511,6 +511,15 @@ body {
   padding: 8px;
 }
 
+.terminal-node__terminal .xterm {
+  width: 100%;
+  height: 100%;
+}
+
+.terminal-node__terminal .xterm-viewport {
+  overscroll-behavior: contain;
+}
+
 .terminal-node__resizer {
   position: absolute;
   right: 4px;

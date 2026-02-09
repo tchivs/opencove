@@ -11,6 +11,8 @@ import type {
   LaunchAgentResult,
   ListAgentModelsInput,
   ResizeTerminalInput,
+  SnapshotTerminalInput,
+  SnapshotTerminalResult,
   SpawnTerminalInput,
   SuggestTaskTitleInput,
   SuggestTaskTitleResult,
@@ -142,6 +144,21 @@ function normalizeEnsureDirectoryPayload(payload: unknown): EnsureDirectoryInput
   return { path }
 }
 
+function normalizeSnapshotPayload(payload: unknown): SnapshotTerminalInput {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Invalid payload for pty:snapshot')
+  }
+
+  const record = payload as Record<string, unknown>
+  const sessionId = typeof record.sessionId === 'string' ? record.sessionId.trim() : ''
+
+  if (sessionId.length === 0) {
+    throw new Error('Invalid sessionId for pty:snapshot')
+  }
+
+  return { sessionId }
+}
+
 function normalizeSuggestTaskTitlePayload(payload: unknown): SuggestTaskTitleInput {
   if (!payload || typeof payload !== 'object') {
     throw new Error('Invalid payload for task:suggest-title')
@@ -175,6 +192,8 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
 
   const wirePtySessionEvents = (sessionId: string, pty: IPty): void => {
     pty.onData(data => {
+      ptyManager.appendSnapshotData(sessionId, data)
+
       webContents.getAllWebContents().forEach(content => {
         const eventPayload: TerminalDataEvent = { sessionId, data }
         content.send(IPC_CHANNELS.ptyData, eventPayload)
@@ -251,6 +270,17 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
   ipcMain.handle(IPC_CHANNELS.ptyKill, async (_event, payload: KillTerminalInput) => {
     ptyManager.kill(payload.sessionId)
   })
+
+  ipcMain.handle(
+    IPC_CHANNELS.ptySnapshot,
+    async (_event, payload: SnapshotTerminalInput): Promise<SnapshotTerminalResult> => {
+      const normalized = normalizeSnapshotPayload(payload)
+
+      return {
+        data: ptyManager.snapshot(normalized.sessionId),
+      }
+    },
+  )
 
   ipcMain.handle(IPC_CHANNELS.agentListModels, async (_event, payload: ListAgentModelsInput) => {
     const normalized = normalizeListModelsPayload(payload)
@@ -336,6 +366,7 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
       ipcMain.removeHandler(IPC_CHANNELS.ptyWrite)
       ipcMain.removeHandler(IPC_CHANNELS.ptyResize)
       ipcMain.removeHandler(IPC_CHANNELS.ptyKill)
+      ipcMain.removeHandler(IPC_CHANNELS.ptySnapshot)
       ipcMain.removeHandler(IPC_CHANNELS.agentListModels)
       ipcMain.removeHandler(IPC_CHANNELS.agentLaunch)
       ipcMain.removeHandler(IPC_CHANNELS.taskSuggestTitle)
