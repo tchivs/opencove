@@ -8,6 +8,7 @@ export const IPC_CHANNELS = {
   ptySnapshot: 'pty:snapshot',
   ptyData: 'pty:data',
   ptyExit: 'pty:exit',
+  ptyDone: 'pty:done',
   agentListModels: 'agent:list-models',
   agentLaunch: 'agent:launch',
   taskSuggestTitle: 'task:suggest-title',

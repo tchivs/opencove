@@ -17,14 +17,18 @@ import type {
   SuggestTaskTitleInput,
   SuggestTaskTitleResult,
   TerminalDataEvent,
+  TerminalDoneEvent,
   TerminalExitEvent,
   WorkspaceDirectory,
   WriteTerminalInput,
 } from '../../shared/types/api'
 import { buildAgentLaunchCommand } from '../infrastructure/agent/AgentCommandFactory'
+import { buildDoneSignalPrompt } from '../infrastructure/agent/AgentDonePromptBuilder'
 import { listAgentModels } from '../infrastructure/agent/AgentModelService'
 import { locateAgentResumeSessionId } from '../infrastructure/agent/AgentSessionLocator'
 import { PtyManager } from '../infrastructure/pty/PtyManager'
+import { resolveSessionFilePath } from '../infrastructure/session/SessionFileResolver'
+import { SessionDoneWatcher } from '../infrastructure/session/SessionDoneWatcher'
 import { suggestTaskTitle } from '../infrastructure/task/TaskTitleGenerator'
 
 export interface IpcRegistrationDisposable {
@@ -159,6 +163,14 @@ function normalizeSnapshotPayload(payload: unknown): SnapshotTerminalInput {
   return { sessionId }
 }
 
+function reportDoneWatcherIssue(message: string): void {
+  if (process.env.NODE_ENV === 'test') {
+    return
+  }
+
+  process.stderr.write(`${message}\n`)
+}
+
 function normalizeSuggestTaskTitlePayload(payload: unknown): SuggestTaskTitleInput {
   if (!payload || typeof payload !== 'object') {
     throw new Error('Invalid payload for task:suggest-title')
@@ -191,6 +203,8 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
   const ptyManager = new PtyManager()
   const terminalProbeBufferBySession = new Map<string, string>()
   const isTerminalAttachedBySession = new Map<string, boolean>()
+  const doneWatcherBySession = new Map<string, SessionDoneWatcher>()
+  const doneWatcherVersionBySession = new Map<string, number>()
 
   const registerSessionProbeState = (sessionId: string): void => {
     isTerminalAttachedBySession.set(sessionId, false)
@@ -205,6 +219,110 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
   const clearSessionProbeState = (sessionId: string): void => {
     isTerminalAttachedBySession.delete(sessionId)
     terminalProbeBufferBySession.delete(sessionId)
+  }
+
+  const bumpDoneWatcherVersion = (sessionId: string): number => {
+    const next = (doneWatcherVersionBySession.get(sessionId) ?? 0) + 1
+    doneWatcherVersionBySession.set(sessionId, next)
+    return next
+  }
+
+  const clearSessionDoneWatcher = (sessionId: string): void => {
+    bumpDoneWatcherVersion(sessionId)
+
+    const watcher = doneWatcherBySession.get(sessionId)
+    if (watcher) {
+      watcher.dispose()
+      doneWatcherBySession.delete(sessionId)
+    }
+  }
+
+  const startSessionDoneWatcher = ({
+    sessionId,
+    provider,
+    cwd,
+    resumeSessionId,
+    startedAtMs,
+  }: {
+    sessionId: string
+    provider: AgentProviderId
+    cwd: string
+    resumeSessionId: string | null
+    startedAtMs: number
+  }): void => {
+    clearSessionDoneWatcher(sessionId)
+
+    const watcherVersion = doneWatcherVersionBySession.get(sessionId) ?? 0
+
+    void (async () => {
+      const resolvedSessionId =
+        resumeSessionId ??
+        (await locateAgentResumeSessionId({
+          provider,
+          cwd,
+          startedAtMs,
+          timeoutMs: 20_000,
+        }))
+
+      if (!resolvedSessionId) {
+        reportDoneWatcherIssue(
+          `[cove] Unable to resolve ${provider} session id for DONE watcher (${sessionId})`,
+        )
+        return
+      }
+
+      const sessionFilePath = await resolveSessionFilePath({
+        provider,
+        cwd,
+        sessionId: resolvedSessionId,
+        startedAtMs,
+        timeoutMs: 20_000,
+      })
+
+      if (!sessionFilePath) {
+        reportDoneWatcherIssue(
+          `[cove] Unable to locate session file for DONE watcher (${provider}, ${resolvedSessionId})`,
+        )
+        return
+      }
+
+      if ((doneWatcherVersionBySession.get(sessionId) ?? 0) !== watcherVersion) {
+        return
+      }
+
+      const watcher = new SessionDoneWatcher({
+        provider,
+        sessionId,
+        filePath: sessionFilePath,
+        onDone: doneSessionId => {
+          clearSessionDoneWatcher(doneSessionId)
+
+          webContents.getAllWebContents().forEach(content => {
+            const eventPayload: TerminalDoneEvent = {
+              sessionId: doneSessionId,
+              signal: 'done',
+            }
+            content.send(IPC_CHANNELS.ptyDone, eventPayload)
+          })
+        },
+        onError: error => {
+          const detail =
+            error instanceof Error ? `${error.name}: ${error.message}` : 'unknown watcher error'
+          reportDoneWatcherIssue(
+            `[cove] DONE watcher failed for ${provider} session ${sessionId}: ${detail}`,
+          )
+          clearSessionDoneWatcher(sessionId)
+        },
+      })
+
+      if ((doneWatcherVersionBySession.get(sessionId) ?? 0) !== watcherVersion) {
+        watcher.dispose()
+        return
+      }
+
+      doneWatcherBySession.set(sessionId, watcher)
+      watcher.start()
+    })()
   }
 
   const resolveTerminalProbeReplies = (sessionId: string, outputChunk: string): void => {
@@ -247,6 +365,7 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
 
     pty.onExit(exit => {
       clearSessionProbeState(sessionId)
+      clearSessionDoneWatcher(sessionId)
       ptyManager.delete(sessionId)
       webContents.getAllWebContents().forEach(content => {
         const eventPayload: TerminalExitEvent = {
@@ -318,6 +437,7 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
 
   ipcMain.handle(IPC_CHANNELS.ptyKill, async (_event, payload: KillTerminalInput) => {
     clearSessionProbeState(payload.sessionId)
+    clearSessionDoneWatcher(payload.sessionId)
     ptyManager.kill(payload.sessionId)
   })
 
@@ -340,10 +460,15 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
   ipcMain.handle(IPC_CHANNELS.agentLaunch, async (_event, payload: LaunchAgentInput) => {
     const normalized = normalizeLaunchAgentPayload(payload)
 
+    const launchPrompt =
+      (normalized.mode ?? 'new') === 'new'
+        ? buildDoneSignalPrompt(normalized.prompt)
+        : normalized.prompt
+
     const launchCommand = buildAgentLaunchCommand({
       provider: normalized.provider,
       mode: normalized.mode ?? 'new',
-      prompt: normalized.prompt,
+      prompt: launchPrompt,
       model: normalized.model ?? null,
       resumeSessionId: normalized.resumeSessionId ?? null,
     })
@@ -387,6 +512,16 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
       }
     }
 
+    if (process.env.NODE_ENV !== 'test') {
+      startSessionDoneWatcher({
+        sessionId,
+        provider: normalized.provider,
+        cwd: normalized.cwd,
+        resumeSessionId,
+        startedAtMs: launchStartedAtMs,
+      })
+    }
+
     const result: LaunchAgentResult = {
       sessionId,
       provider: normalized.provider,
@@ -410,6 +545,12 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
 
   return {
     dispose: () => {
+      doneWatcherBySession.forEach(watcher => {
+        watcher.dispose()
+      })
+      doneWatcherBySession.clear()
+      doneWatcherVersionBySession.clear()
+
       ptyManager.disposeAll()
       ipcMain.removeHandler(IPC_CHANNELS.workspaceSelectDirectory)
       ipcMain.removeHandler(IPC_CHANNELS.workspaceEnsureDirectory)

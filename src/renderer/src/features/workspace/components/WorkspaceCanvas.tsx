@@ -800,9 +800,64 @@ function WorkspaceCanvasInner({
   }, [updateNodeScrollback])
 
   useEffect(() => {
+    const ptyWithOptionalDone = window.coveApi.pty as typeof window.coveApi.pty & {
+      onDone?:
+        | ((listener: (event: { sessionId: string; signal: 'done' }) => void) => () => void)
+        | undefined
+    }
+
+    if (typeof ptyWithOptionalDone.onDone !== 'function') {
+      return
+    }
+
+    const unsubscribeDone = ptyWithOptionalDone.onDone(event => {
+      if (event.signal !== 'done') {
+        return
+      }
+
+      setNodes(prevNodes => {
+        const taskNodeId = prevNodes.find(node => {
+          return node.data.kind === 'agent' && node.data.sessionId === event.sessionId
+        })?.data.agent?.taskId
+
+        if (!taskNodeId) {
+          return prevNodes
+        }
+
+        return prevNodes.map(node => {
+          if (node.id !== taskNodeId || node.data.kind !== 'task' || !node.data.task) {
+            return node
+          }
+
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              task: {
+                ...node.data.task,
+                status: 'ai_done',
+              },
+            },
+          }
+        })
+      })
+    })
+
+    return () => {
+      unsubscribeDone()
+    }
+  }, [setNodes])
+
+  useEffect(() => {
+    const ptyWithOptionalDone = window.coveApi.pty as typeof window.coveApi.pty & {
+      onDone?: unknown
+    }
+    const shouldFallbackToExitDone = typeof ptyWithOptionalDone.onDone !== 'function'
+
     const unsubscribeExit = window.coveApi.pty.onExit(event => {
       setNodes(prevNodes => {
         let relatedTaskNodeId: string | null = null
+
         const nextNodes = prevNodes.map(node => {
           if (node.data.sessionId !== event.sessionId || node.data.kind !== 'agent') {
             return node
@@ -825,7 +880,7 @@ function WorkspaceCanvasInner({
           }
         })
 
-        if (!relatedTaskNodeId) {
+        if (!shouldFallbackToExitDone || event.exitCode !== 0 || !relatedTaskNodeId) {
           return nextNodes
         }
 
@@ -840,7 +895,7 @@ function WorkspaceCanvasInner({
               ...node.data,
               task: {
                 ...node.data.task,
-                status: event.exitCode === 0 ? 'ai_done' : 'doing',
+                status: 'ai_done',
               },
             },
           }

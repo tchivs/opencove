@@ -52,6 +52,11 @@ export interface TerminalExitEvent {
   exitCode: number
 }
 
+export interface TerminalDoneEvent {
+  sessionId: string
+  signal: 'done'
+}
+
 export type AgentProviderId = 'claude-code' | 'codex'
 
 export type AgentLaunchMode = 'new' | 'resume'

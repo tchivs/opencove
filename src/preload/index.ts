@@ -15,6 +15,7 @@ import type {
   SuggestTaskTitleInput,
   SuggestTaskTitleResult,
   TerminalDataEvent,
+  TerminalDoneEvent,
   TerminalExitEvent,
   WorkspaceDirectory,
   WriteTerminalInput,
@@ -61,6 +62,17 @@ const coveApi = {
 
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.ptyExit, handler)
+      }
+    },
+    onDone: (listener: (event: TerminalDoneEvent) => void): UnsubscribeFn => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: TerminalDoneEvent) => {
+        listener(payload)
+      }
+
+      ipcRenderer.on(IPC_CHANNELS.ptyDone, handler)
+
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.ptyDone, handler)
       }
     },
   },

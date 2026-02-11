@@ -13,6 +13,7 @@ import type {
   SuggestTaskTitleInput,
   SuggestTaskTitleResult,
   TerminalDataEvent,
+  TerminalDoneEvent,
   TerminalExitEvent,
   WorkspaceDirectory,
   WriteTerminalInput,
@@ -33,6 +34,7 @@ export interface CoveApi {
     snapshot: (payload: SnapshotTerminalInput) => Promise<SnapshotTerminalResult>
     onData: (listener: (event: TerminalDataEvent) => void) => UnsubscribeFn
     onExit: (listener: (event: TerminalExitEvent) => void) => UnsubscribeFn
+    onDone: (listener: (event: TerminalDoneEvent) => void) => UnsubscribeFn
   }
   agent: {
     listModels: (payload: ListAgentModelsInput) => Promise<ListAgentModelsResult>
