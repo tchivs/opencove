@@ -5,6 +5,7 @@ import {
   writePersistedState,
   writeRawPersistedState,
 } from '../../../src/renderer/src/features/workspace/utils/persistence'
+import { DEFAULT_WORKSPACE_VIEWPORT } from '../../../src/renderer/src/features/workspace/types'
 import type { WorkspaceState } from '../../../src/renderer/src/features/workspace/types'
 
 class MockStorage implements Storage {
@@ -49,6 +50,8 @@ describe('workspace persistence', () => {
         id: 'workspace-1',
         name: 'cove',
         path: '/tmp/cove',
+        viewport: { x: -320, y: 180, zoom: 1.25 },
+        isMinimapVisible: false,
         nodes: [
           {
             id: 'node-1',
@@ -159,6 +162,8 @@ describe('workspace persistence', () => {
     expect(restored).not.toBeNull()
     expect(restored?.activeWorkspaceId).toBe('workspace-1')
     expect(restored?.workspaces).toHaveLength(1)
+    expect(restored?.workspaces[0].viewport).toEqual({ x: -320, y: 180, zoom: 1.25 })
+    expect(restored?.workspaces[0].isMinimapVisible).toBe(false)
     expect(restored?.workspaces[0].nodes).toHaveLength(3)
     expect(restored?.workspaces[0].nodes[0].title).toBe('terminal-1')
     expect(restored?.workspaces[0].nodes[0].scrollback).toContain('terminal output line 2')
@@ -190,6 +195,8 @@ describe('workspace persistence', () => {
           id: 'workspace-1',
           name: 'cove',
           path: '/tmp/cove',
+          viewport: { x: 0, y: 0, zoom: 1 },
+          isMinimapVisible: true,
           nodes: [
             {
               id: 'terminal-1',
@@ -252,6 +259,29 @@ describe('workspace persistence', () => {
       'test',
     ])
     expect(restored?.settings.normalizeZoomOnTerminalClick).toBe(true)
+  })
+
+  it('fills missing workspace viewport fields for legacy payload', () => {
+    writeRawPersistedState(
+      JSON.stringify({
+        activeWorkspaceId: 'workspace-1',
+        workspaces: [
+          {
+            id: 'workspace-1',
+            name: 'cove',
+            path: '/tmp/cove',
+            nodes: [],
+          },
+        ],
+        settings: {},
+      }),
+    )
+
+    const restored = readPersistedState()
+    expect(restored).not.toBeNull()
+    expect(restored?.workspaces).toHaveLength(1)
+    expect(restored?.workspaces[0].viewport).toEqual(DEFAULT_WORKSPACE_VIEWPORT)
+    expect(restored?.workspaces[0].isMinimapVisible).toBe(true)
   })
 
   it('returns null when stored json is invalid', () => {

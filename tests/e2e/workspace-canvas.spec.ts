@@ -202,6 +202,32 @@ async function clearAndSeedWorkspace(
   })
 }
 
+async function readCanvasViewport(window: Page): Promise<{ x: number; y: number; zoom: number }> {
+  return await window.evaluate(() => {
+    const viewport = document.querySelector('.react-flow__viewport') as HTMLElement | null
+    if (!viewport) {
+      return { x: 0, y: 0, zoom: 1 }
+    }
+
+    const style = window.getComputedStyle(viewport)
+    const matrix = style.transform.match(/matrix\(([^)]+)\)/)
+    if (!matrix) {
+      return { x: 0, y: 0, zoom: 1 }
+    }
+
+    const values = matrix[1].split(',').map(item => Number(item.trim()))
+    if (values.length < 6) {
+      return { x: 0, y: 0, zoom: 1 }
+    }
+
+    const zoom = Number.isFinite(values[0]) ? values[0] : 1
+    const x = Number.isFinite(values[4]) ? values[4] : 0
+    const y = Number.isFinite(values[5]) ? values[5] : 0
+
+    return { x, y, zoom }
+  })
+}
+
 test.describe('Workspace Canvas Interactions', () => {
   test('keeps terminal visible after drag, resize, and node interactions', async () => {
     const { electronApp, window } = await launchApp()
@@ -776,6 +802,172 @@ test.describe('Workspace Canvas Interactions', () => {
     }
   })
 
+  test('preserves canvas viewport and minimap visibility after app reload', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(window, [
+        {
+          id: 'node-viewport-reload',
+          title: 'terminal-viewport-reload',
+          position: { x: 360, y: 280 },
+          width: 460,
+          height: 300,
+        },
+      ])
+
+      const zoomInButton = window.locator('.react-flow__controls-zoomin')
+      await expect(zoomInButton).toBeVisible()
+      await zoomInButton.click()
+      await zoomInButton.click()
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      await expect(pane).toBeVisible()
+      await pane.dragTo(pane, {
+        sourcePosition: { x: 420, y: 320 },
+        targetPosition: { x: 260, y: 220 },
+      })
+
+      const minimapDock = window.locator('.workspace-canvas__minimap-dock')
+      await minimapDock.hover()
+      const minimapToggle = window.locator('[data-testid="workspace-minimap-toggle"]')
+      await expect(minimapToggle).toBeVisible()
+      await minimapToggle.click()
+      await expect(window.locator('.workspace-canvas__minimap')).toHaveCount(0)
+
+      await expect
+        .poll(
+          async () => {
+            return await window.evaluate(
+              ({ key, workspaceId }) => {
+                const raw = window.localStorage.getItem(key)
+                if (!raw) {
+                  return null
+                }
+
+                const parsed = JSON.parse(raw) as {
+                  workspaces?: Array<{
+                    id?: string
+                    viewport?: {
+                      x?: number
+                      y?: number
+                      zoom?: number
+                    }
+                    isMinimapVisible?: boolean
+                  }>
+                }
+
+                const workspace = parsed.workspaces?.find(item => item.id === workspaceId)
+                if (!workspace?.viewport) {
+                  return null
+                }
+
+                const { x, y, zoom } = workspace.viewport
+                if (
+                  typeof x !== 'number' ||
+                  typeof y !== 'number' ||
+                  typeof zoom !== 'number' ||
+                  !Number.isFinite(x) ||
+                  !Number.isFinite(y) ||
+                  !Number.isFinite(zoom)
+                ) {
+                  return null
+                }
+
+                return {
+                  x,
+                  y,
+                  zoom,
+                  isMinimapVisible:
+                    typeof workspace.isMinimapVisible === 'boolean'
+                      ? workspace.isMinimapVisible
+                      : true,
+                }
+              },
+              {
+                key: storageKey,
+                workspaceId: seededWorkspaceId,
+              },
+            )
+          },
+          { timeout: 10_000 },
+        )
+        .toMatchObject({
+          isMinimapVisible: false,
+        })
+
+      const persistedViewport = await window.evaluate<{
+        x: number
+        y: number
+        zoom: number
+      } | null>(
+        ({ key, workspaceId }) => {
+          const raw = window.localStorage.getItem(key)
+          if (!raw) {
+            return null
+          }
+
+          const parsed = JSON.parse(raw) as {
+            workspaces?: Array<{
+              id?: string
+              viewport?: {
+                x?: number
+                y?: number
+                zoom?: number
+              }
+            }>
+          }
+          const workspace = parsed.workspaces?.find(item => item.id === workspaceId)
+          const viewport = workspace?.viewport
+          if (
+            !viewport ||
+            typeof viewport.x !== 'number' ||
+            typeof viewport.y !== 'number' ||
+            typeof viewport.zoom !== 'number'
+          ) {
+            return null
+          }
+
+          return viewport
+        },
+        {
+          key: storageKey,
+          workspaceId: seededWorkspaceId,
+        },
+      )
+
+      if (!persistedViewport) {
+        throw new Error('Persisted viewport not found after canvas interactions')
+      }
+
+      await window.reload({ waitUntil: 'domcontentloaded' })
+      await expect(window.locator('.workspace-canvas__minimap')).toHaveCount(0)
+
+      await expect
+        .poll(async () => {
+          const current = await readCanvasViewport(window)
+          return current.zoom
+        })
+        .toBeCloseTo(persistedViewport.zoom, 2)
+
+      await expect
+        .poll(async () => {
+          const current = await readCanvasViewport(window)
+          return Math.abs(current.x - persistedViewport.x)
+        })
+        .toBeLessThan(6)
+
+      await expect
+        .poll(async () => {
+          const current = await readCanvasViewport(window)
+          return Math.abs(current.y - persistedViewport.y)
+        })
+        .toBeLessThan(6)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
   test('wheel over terminal scrolls terminal viewport', async () => {
     const { electronApp, window } = await launchApp()
 
@@ -792,9 +984,12 @@ test.describe('Workspace Canvas Interactions', () => {
 
       const terminal = window.locator('.terminal-node').first()
       await expect(terminal).toBeVisible()
-      await terminal.locator('.xterm').click()
-      await window.keyboard.type("seq 1 260 | sed 's/^/COVE_SCROLL_/'")
-      await window.keyboard.press('Enter')
+      const terminalSurface = terminal.locator('.xterm')
+      await terminalSurface.click()
+      await window.keyboard.type(
+        `node -e "for (let i = 1; i <= 260; i += 1) console.log('COVE_SCROLL_' + i)"`,
+      )
+      await terminalSurface.press('Enter')
       await expect(terminal).toContainText('COVE_SCROLL_260')
 
       const viewport = terminal.locator('.xterm-viewport')

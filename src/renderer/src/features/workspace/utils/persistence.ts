@@ -5,19 +5,22 @@ import {
   type AgentProvider,
   type AgentSettings,
 } from '../../settings/agentConfig'
-import type {
-  AgentLaunchMode,
-  AgentNodeData,
-  AgentRuntimeStatus,
-  ExecutionDirectoryMode,
-  PersistedAppState,
-  PersistedWorkspaceState,
-  PersistedTerminalNode,
-  TaskNodeData,
-  TaskPriority,
-  TaskRuntimeStatus,
-  WorkspaceNodeKind,
-  WorkspaceState,
+import {
+  DEFAULT_WORKSPACE_MINIMAP_VISIBLE,
+  DEFAULT_WORKSPACE_VIEWPORT,
+  type AgentLaunchMode,
+  type AgentNodeData,
+  type AgentRuntimeStatus,
+  type ExecutionDirectoryMode,
+  type PersistedAppState,
+  type PersistedWorkspaceState,
+  type PersistedTerminalNode,
+  type TaskNodeData,
+  type TaskPriority,
+  type TaskRuntimeStatus,
+  type WorkspaceViewport,
+  type WorkspaceNodeKind,
+  type WorkspaceState,
 } from '../types'
 
 const STORAGE_KEY = 'cove:m0:workspace-state'
@@ -143,6 +146,36 @@ function normalizeScrollback(value: unknown): string | null {
   }
 
   return value.slice(-MAX_PERSISTED_SCROLLBACK_CHARS)
+}
+
+function normalizeWorkspaceViewport(value: unknown): WorkspaceViewport {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_WORKSPACE_VIEWPORT }
+  }
+
+  const record = value as Record<string, unknown>
+  const x =
+    typeof record.x === 'number' && Number.isFinite(record.x)
+      ? record.x
+      : DEFAULT_WORKSPACE_VIEWPORT.x
+  const y =
+    typeof record.y === 'number' && Number.isFinite(record.y)
+      ? record.y
+      : DEFAULT_WORKSPACE_VIEWPORT.y
+  const zoom =
+    typeof record.zoom === 'number' && Number.isFinite(record.zoom) && record.zoom > 0
+      ? record.zoom
+      : DEFAULT_WORKSPACE_VIEWPORT.zoom
+
+  return {
+    x,
+    y,
+    zoom,
+  }
+}
+
+function normalizeWorkspaceMinimapVisible(value: unknown): boolean {
+  return typeof value === 'boolean' ? value : DEFAULT_WORKSPACE_MINIMAP_VISIBLE
 }
 
 function ensurePersistedAgentData(value: unknown): AgentNodeData | null {
@@ -282,6 +315,8 @@ function ensurePersistedWorkspace(workspace: unknown): PersistedWorkspaceState |
     name,
     path,
     nodes: normalizedNodes,
+    viewport: normalizeWorkspaceViewport(record.viewport),
+    isMinimapVisible: normalizeWorkspaceMinimapVisible(record.isMinimapVisible),
   }
 }
 
@@ -359,6 +394,11 @@ export function toPersistedState(
       id: workspace.id,
       name: workspace.name,
       path: workspace.path,
+      viewport: normalizeWorkspaceViewport(workspace.viewport),
+      isMinimapVisible:
+        typeof workspace.isMinimapVisible === 'boolean'
+          ? workspace.isMinimapVisible
+          : DEFAULT_WORKSPACE_MINIMAP_VISIBLE,
       nodes: workspace.nodes.map(node => ({
         id: node.id,
         title: node.data.title,

@@ -61,6 +61,8 @@ export interface WorkspaceState {
   name: string
   path: string
   nodes: Node<TerminalNodeData>[]
+  viewport: WorkspaceViewport
+  isMinimapVisible: boolean
 }
 
 export interface PersistedWorkspaceState {
@@ -68,6 +70,8 @@ export interface PersistedWorkspaceState {
   name: string
   path: string
   nodes: PersistedTerminalNode[]
+  viewport: WorkspaceViewport
+  isMinimapVisible: boolean
 }
 
 export interface PersistedTerminalNode {
@@ -92,6 +96,20 @@ export interface PersistedAppState {
   workspaces: PersistedWorkspaceState[]
   settings: AgentSettings
 }
+
+export interface WorkspaceViewport {
+  x: number
+  y: number
+  zoom: number
+}
+
+export const DEFAULT_WORKSPACE_VIEWPORT: WorkspaceViewport = {
+  x: 0,
+  y: 0,
+  zoom: 1,
+}
+
+export const DEFAULT_WORKSPACE_MINIMAP_VISIBLE = true
 
 export interface Size {
   width: number

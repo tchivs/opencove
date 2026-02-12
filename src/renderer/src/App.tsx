@@ -10,9 +10,15 @@ import {
 } from './features/settings/agentConfig'
 import { WorkspaceCanvas } from './features/workspace/components/WorkspaceCanvas'
 import type {
+  PersistedWorkspaceState,
   TaskRuntimeStatus,
   TerminalNodeData,
+  WorkspaceViewport,
   WorkspaceState,
+} from './features/workspace/types'
+import {
+  DEFAULT_WORKSPACE_MINIMAP_VISIBLE,
+  DEFAULT_WORKSPACE_VIEWPORT,
 } from './features/workspace/types'
 import {
   readPersistedState,
@@ -141,6 +147,14 @@ function resolveSidebarTaskStatusTone(taskStatus: SidebarTaskStatus): SidebarSta
   }
 }
 
+function createDefaultWorkspaceViewport(): WorkspaceViewport {
+  return {
+    x: DEFAULT_WORKSPACE_VIEWPORT.x,
+    y: DEFAULT_WORKSPACE_VIEWPORT.y,
+    zoom: DEFAULT_WORKSPACE_VIEWPORT.zoom,
+  }
+}
+
 function App(): React.JSX.Element {
   const [workspaces, setWorkspaces] = useState<WorkspaceState[]>([])
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
@@ -166,90 +180,91 @@ function App(): React.JSX.Element {
       return
     }
 
-    const restore = async (): Promise<void> => {
-      const restoredWorkspaces = await Promise.all(
-        persisted.workspaces.map(async workspace => {
-          const runtimeNodes = toRuntimeNodes(workspace)
+    const hasActiveWorkspace = persisted.workspaces.some(
+      workspace => workspace.id === persisted.activeWorkspaceId,
+    )
+    const resolvedActiveWorkspaceId = hasActiveWorkspace
+      ? persisted.activeWorkspaceId
+      : (persisted.workspaces[0]?.id ?? null)
 
-          const hydratedNodeResults = await Promise.allSettled(
-            runtimeNodes.map(async node => {
-              if (node.data.kind === 'task') {
-                return {
-                  ...node,
-                  data: {
-                    ...node.data,
-                    sessionId: '',
-                    status: null,
-                    startedAt: null,
-                    endedAt: null,
-                    exitCode: null,
-                    lastError: null,
-                    scrollback: null,
-                    agent: null,
+    setWorkspaces(
+      persisted.workspaces.map(workspace => ({
+        id: workspace.id,
+        name: workspace.name,
+        path: workspace.path,
+        nodes: [],
+        viewport: {
+          x: workspace.viewport.x,
+          y: workspace.viewport.y,
+          zoom: workspace.viewport.zoom,
+        },
+        isMinimapVisible: workspace.isMinimapVisible,
+      })),
+    )
+    setActiveWorkspaceId(resolvedActiveWorkspaceId)
+
+    let isCancelled = false
+
+    const hydrateWorkspace = async (
+      workspace: PersistedWorkspaceState,
+    ): Promise<WorkspaceState> => {
+      const runtimeNodes = toRuntimeNodes(workspace)
+
+      const hydratedNodeResults = await Promise.allSettled(
+        runtimeNodes.map(async node => {
+          if (node.data.kind === 'task') {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                sessionId: '',
+                status: null,
+                startedAt: null,
+                endedAt: null,
+                exitCode: null,
+                lastError: null,
+                scrollback: null,
+                agent: null,
+              },
+            }
+          }
+
+          if (node.data.kind === 'agent' && node.data.agent) {
+            try {
+              const restoredAgent = await window.coveApi.agent.launch({
+                provider: node.data.agent.provider,
+                cwd: node.data.agent.executionDirectory,
+                prompt: node.data.agent.prompt,
+                mode: 'resume',
+                model: node.data.agent.model,
+                resumeSessionId: node.data.agent.resumeSessionId,
+                cols: 80,
+                rows: 24,
+              })
+
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  sessionId: restoredAgent.sessionId,
+                  title: toAgentNodeTitle(node.data.agent.provider, restoredAgent.effectiveModel),
+                  status: 'running' as const,
+                  endedAt: null,
+                  exitCode: null,
+                  lastError: null,
+                  scrollback: node.data.scrollback,
+                  startedAt: node.data.startedAt ?? new Date().toISOString(),
+                  agent: {
+                    ...node.data.agent,
+                    effectiveModel: restoredAgent.effectiveModel,
+                    launchMode: restoredAgent.launchMode,
+                    resumeSessionId:
+                      restoredAgent.resumeSessionId ?? node.data.agent.resumeSessionId,
                   },
-                }
+                },
               }
-
-              if (node.data.kind === 'agent' && node.data.agent) {
-                try {
-                  const restoredAgent = await window.coveApi.agent.launch({
-                    provider: node.data.agent.provider,
-                    cwd: node.data.agent.executionDirectory,
-                    prompt: node.data.agent.prompt,
-                    mode: 'resume',
-                    model: node.data.agent.model,
-                    resumeSessionId: node.data.agent.resumeSessionId,
-                    cols: 80,
-                    rows: 24,
-                  })
-
-                  return {
-                    ...node,
-                    data: {
-                      ...node.data,
-                      sessionId: restoredAgent.sessionId,
-                      title: toAgentNodeTitle(
-                        node.data.agent.provider,
-                        restoredAgent.effectiveModel,
-                      ),
-                      status: 'running' as const,
-                      endedAt: null,
-                      exitCode: null,
-                      lastError: null,
-                      scrollback: node.data.scrollback,
-                      startedAt: node.data.startedAt ?? new Date().toISOString(),
-                      agent: {
-                        ...node.data.agent,
-                        effectiveModel: restoredAgent.effectiveModel,
-                        launchMode: restoredAgent.launchMode,
-                        resumeSessionId:
-                          restoredAgent.resumeSessionId ?? node.data.agent.resumeSessionId,
-                      },
-                    },
-                  }
-                } catch (error) {
-                  const fallback = await window.coveApi.pty.spawn({
-                    cwd: workspace.path,
-                    cols: 80,
-                    rows: 24,
-                  })
-
-                  return {
-                    ...node,
-                    data: {
-                      ...node.data,
-                      sessionId: fallback.sessionId,
-                      status: 'failed' as const,
-                      endedAt: new Date().toISOString(),
-                      exitCode: null,
-                      lastError: `Resume failed: ${toErrorMessage(error)}`,
-                      scrollback: node.data.scrollback,
-                    },
-                  }
-                }
-              }
-
-              const spawned = await window.coveApi.pty.spawn({
+            } catch (error) {
+              const fallback = await window.coveApi.pty.spawn({
                 cwd: workspace.path,
                 cols: 80,
                 rows: 24,
@@ -259,51 +274,120 @@ function App(): React.JSX.Element {
                 ...node,
                 data: {
                   ...node.data,
-                  sessionId: spawned.sessionId,
-                  kind: 'terminal' as const,
-                  status: null,
-                  startedAt: null,
-                  endedAt: null,
+                  sessionId: fallback.sessionId,
+                  status: 'failed' as const,
+                  endedAt: new Date().toISOString(),
                   exitCode: null,
-                  lastError: null,
+                  lastError: `Resume failed: ${toErrorMessage(error)}`,
                   scrollback: node.data.scrollback,
-                  agent: null,
-                  task: null,
                 },
               }
-            }),
-          )
+            }
+          }
 
-          const hydratedNodes = hydratedNodeResults
-            .filter(result => result.status === 'fulfilled')
-            .map(
-              result =>
-                (result as PromiseFulfilledResult<import('@xyflow/react').Node<TerminalNodeData>>)
-                  .value,
-            )
+          const spawned = await window.coveApi.pty.spawn({
+            cwd: workspace.path,
+            cols: 80,
+            rows: 24,
+          })
 
           return {
-            id: workspace.id,
-            name: workspace.name,
-            path: workspace.path,
-            nodes: hydratedNodes,
+            ...node,
+            data: {
+              ...node.data,
+              sessionId: spawned.sessionId,
+              kind: 'terminal' as const,
+              status: null,
+              startedAt: null,
+              endedAt: null,
+              exitCode: null,
+              lastError: null,
+              scrollback: node.data.scrollback,
+              agent: null,
+              task: null,
+            },
           }
         }),
       )
 
-      setWorkspaces(restoredWorkspaces)
+      const hydratedNodes = hydratedNodeResults
+        .filter(result => result.status === 'fulfilled')
+        .map(
+          result =>
+            (result as PromiseFulfilledResult<import('@xyflow/react').Node<TerminalNodeData>>)
+              .value,
+        )
 
-      const hasActive = restoredWorkspaces.some(
-        workspace => workspace.id === persisted.activeWorkspaceId,
+      return {
+        id: workspace.id,
+        name: workspace.name,
+        path: workspace.path,
+        nodes: hydratedNodes,
+        viewport: {
+          x: workspace.viewport.x,
+          y: workspace.viewport.y,
+          zoom: workspace.viewport.zoom,
+        },
+        isMinimapVisible: workspace.isMinimapVisible,
+      }
+    }
+
+    const applyHydratedWorkspace = (hydratedWorkspace: WorkspaceState): void => {
+      if (isCancelled) {
+        return
+      }
+
+      setWorkspaces(previous =>
+        previous.map(workspace =>
+          workspace.id === hydratedWorkspace.id ? hydratedWorkspace : workspace,
+        ),
       )
-      setActiveWorkspaceId(
-        hasActive ? persisted.activeWorkspaceId : (restoredWorkspaces[0]?.id ?? null),
+    }
+
+    const restore = async (): Promise<void> => {
+      const activeWorkspace = resolvedActiveWorkspaceId
+        ? (persisted.workspaces.find(workspace => workspace.id === resolvedActiveWorkspaceId) ??
+          null)
+        : null
+
+      if (activeWorkspace) {
+        const hydratedActiveWorkspace = await hydrateWorkspace(activeWorkspace)
+        applyHydratedWorkspace(hydratedActiveWorkspace)
+      }
+
+      const remainingWorkspaces = persisted.workspaces.filter(
+        workspace => workspace.id !== resolvedActiveWorkspaceId,
+      )
+
+      if (remainingWorkspaces.length === 0) {
+        return
+      }
+
+      const hydratedRemainingWorkspaces = await Promise.all(
+        remainingWorkspaces.map(workspace => hydrateWorkspace(workspace)),
+      )
+
+      if (isCancelled) {
+        return
+      }
+
+      const hydratedWorkspaceById = new Map(
+        hydratedRemainingWorkspaces.map(workspace => [workspace.id, workspace]),
+      )
+      setWorkspaces(previous =>
+        previous.map(workspace => hydratedWorkspaceById.get(workspace.id) ?? workspace),
       )
     }
 
     void restore().finally(() => {
-      setIsHydrated(true)
+      if (!isCancelled) {
+        setIsHydrated(true)
+      }
     })
+
+    return () => {
+      isCancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -391,6 +475,8 @@ function App(): React.JSX.Element {
     const nextWorkspace: WorkspaceState = {
       ...selected,
       nodes: [],
+      viewport: createDefaultWorkspaceViewport(),
+      isMinimapVisible: DEFAULT_WORKSPACE_MINIMAP_VISIBLE,
     }
 
     setWorkspaces(prev => [...prev, nextWorkspace])
@@ -413,6 +499,66 @@ function App(): React.JSX.Element {
           return {
             ...workspace,
             nodes,
+          }
+        }),
+      )
+    },
+    [activeWorkspace],
+  )
+
+  const handleWorkspaceViewportChange = useCallback(
+    (viewport: WorkspaceViewport): void => {
+      if (!activeWorkspace) {
+        return
+      }
+
+      setWorkspaces(previous =>
+        previous.map(workspace => {
+          if (workspace.id !== activeWorkspace.id) {
+            return workspace
+          }
+
+          if (
+            workspace.viewport.x === viewport.x &&
+            workspace.viewport.y === viewport.y &&
+            workspace.viewport.zoom === viewport.zoom
+          ) {
+            return workspace
+          }
+
+          return {
+            ...workspace,
+            viewport: {
+              x: viewport.x,
+              y: viewport.y,
+              zoom: viewport.zoom,
+            },
+          }
+        }),
+      )
+    },
+    [activeWorkspace],
+  )
+
+  const handleWorkspaceMinimapVisibilityChange = useCallback(
+    (isVisible: boolean): void => {
+      if (!activeWorkspace) {
+        return
+      }
+
+      setWorkspaces(previous =>
+        previous.map(workspace => {
+          if (workspace.id !== activeWorkspace.id) {
+            return workspace
+          }
+
+          if (workspace.isMinimapVisible === isVisible) {
+            return workspace
+          }
+
+          return {
+            ...workspace,
+            isMinimapVisible: isVisible,
           }
         }),
       )
@@ -579,9 +725,14 @@ function App(): React.JSX.Element {
         <main className="workspace-main">
           {activeWorkspace ? (
             <WorkspaceCanvas
+              workspaceId={activeWorkspace.id}
               workspacePath={activeWorkspace.path}
               nodes={activeWorkspace.nodes}
               onNodesChange={handleWorkspaceNodesChange}
+              viewport={activeWorkspace.viewport}
+              isMinimapVisible={activeWorkspace.isMinimapVisible}
+              onViewportChange={handleWorkspaceViewportChange}
+              onMinimapVisibilityChange={handleWorkspaceMinimapVisibilityChange}
               agentSettings={agentSettings}
               focusNodeId={
                 focusRequest && focusRequest.workspaceId === activeWorkspace.id

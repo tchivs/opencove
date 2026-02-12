@@ -12,6 +12,7 @@ import {
   type Node,
   type NodeChange,
   type NodePositionChange,
+  type Viewport,
   MarkerType,
 } from '@xyflow/react'
 import { Map as MapIcon } from 'lucide-react'
@@ -33,6 +34,7 @@ import type {
   TaskPriority,
   TaskRuntimeStatus,
   TerminalNodeData,
+  WorkspaceViewport,
 } from '../types'
 import {
   clampSizeToNonOverlapping,
@@ -41,9 +43,14 @@ import {
 } from '../utils/collision'
 
 interface WorkspaceCanvasProps {
+  workspaceId: string
   workspacePath: string
   nodes: Node<TerminalNodeData>[]
   onNodesChange: (nodes: Node<TerminalNodeData>[]) => void
+  viewport: WorkspaceViewport
+  isMinimapVisible: boolean
+  onViewportChange: (viewport: WorkspaceViewport) => void
+  onMinimapVisibilityChange: (isVisible: boolean) => void
   agentSettings: AgentSettings
   focusNodeId?: string | null
   focusSequence?: number
@@ -229,9 +236,14 @@ function toSuggestedWorktreePath(workspacePath: string, provider: AgentProvider)
 }
 
 function WorkspaceCanvasInner({
+  workspaceId,
   workspacePath,
   nodes,
   onNodesChange,
+  viewport,
+  isMinimapVisible: persistedMinimapVisible,
+  onViewportChange,
+  onMinimapVisibilityChange,
   agentSettings,
   focusNodeId,
   focusSequence,
@@ -243,10 +255,11 @@ function WorkspaceCanvasInner({
   const [taskAssigner, setTaskAssigner] = useState<TaskAssignerState | null>(null)
   const [taskDeleteConfirmation, setTaskDeleteConfirmation] =
     useState<TaskDeleteConfirmationState | null>(null)
-  const [isMinimapVisible, setIsMinimapVisible] = useState(true)
+  const [isMinimapVisible, setIsMinimapVisible] = useState(persistedMinimapVisible)
 
   const reactFlow = useReactFlow<Node<TerminalNodeData>, Edge>()
   const canvasRef = useRef<HTMLDivElement | null>(null)
+  const restoredViewportWorkspaceIdRef = useRef<string | null>(null)
 
   const nodesRef = useRef(nodes)
   const closeNodeRef = useRef<(nodeId: string) => Promise<void>>(async () => undefined)
@@ -282,6 +295,27 @@ function WorkspaceCanvasInner({
   useEffect(() => {
     nodesRef.current = nodes
   }, [nodes])
+
+  useEffect(() => {
+    setIsMinimapVisible(persistedMinimapVisible)
+  }, [persistedMinimapVisible, workspaceId])
+
+  useEffect(() => {
+    if (restoredViewportWorkspaceIdRef.current === workspaceId) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      reactFlow.setViewport(viewport, {
+        duration: 0,
+      })
+      restoredViewportWorkspaceIdRef.current = workspaceId
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [reactFlow, viewport, workspaceId])
 
   const setNodes = useCallback(
     (
@@ -2292,6 +2326,16 @@ function WorkspaceCanvasInner({
 
   const taskTitleProviderLabel = AGENT_PROVIDER_LABEL[resolveTaskTitleProvider(agentSettings)]
   const taskTitleModelLabel = resolveTaskTitleModel(agentSettings) ?? 'default model'
+  const handleViewportMoveEnd = useCallback(
+    (_event: MouseEvent | TouchEvent | null, nextViewport: Viewport) => {
+      onViewportChange({
+        x: nextViewport.x,
+        y: nextViewport.y,
+        zoom: nextViewport.zoom,
+      })
+    },
+    [onViewportChange],
+  )
   const minimapNodeColor = useCallback((node: Node<TerminalNodeData>): string => {
     switch (node.data.kind) {
       case 'agent':
@@ -2381,13 +2425,14 @@ function WorkspaceCanvasInner({
         nodeTypes={nodeTypes}
         onNodesChange={applyChanges}
         onPaneContextMenu={handlePaneContextMenu}
+        onMoveEnd={handleViewportMoveEnd}
         nodesDraggable
         elementsSelectable
         zoomOnScroll
         panOnScroll={false}
         zoomOnPinch
         zoomOnDoubleClick
-        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+        defaultViewport={viewport}
         minZoom={0.1}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
@@ -2415,7 +2460,11 @@ function WorkspaceCanvasInner({
             title={isMinimapVisible ? 'Hide minimap' : 'Show minimap'}
             onClick={event => {
               event.stopPropagation()
-              setIsMinimapVisible(previous => !previous)
+              setIsMinimapVisible(previous => {
+                const nextValue = !previous
+                onMinimapVisibilityChange(nextValue)
+                return nextValue
+              })
             }}
           >
             <MapIcon aria-hidden="true" />
