@@ -9,7 +9,11 @@ import {
   type AgentSettings,
 } from './features/settings/agentConfig'
 import { WorkspaceCanvas } from './features/workspace/components/WorkspaceCanvas'
-import type { TerminalNodeData, WorkspaceState } from './features/workspace/types'
+import type {
+  TaskRuntimeStatus,
+  TerminalNodeData,
+  WorkspaceState,
+} from './features/workspace/types'
 import {
   readPersistedState,
   toPersistedState,
@@ -93,6 +97,48 @@ function toRelativeTime(iso: string | null): string {
   }
 
   return `${Math.floor(deltaSeconds / 86400)}d ago`
+}
+
+type SidebarAgentStatus = 'working' | 'standby'
+
+type SidebarTaskStatus = TaskRuntimeStatus | 'none'
+
+type SidebarStatusTone = 'working' | 'standby' | 'todo' | 'done' | 'done-strong'
+
+const SIDEBAR_AGENT_STATUS_LABEL: Record<SidebarAgentStatus, string> = {
+  working: 'Working',
+  standby: 'Standby',
+}
+
+const SIDEBAR_TASK_STATUS_LABEL: Record<SidebarTaskStatus, string> = {
+  todo: 'TODO',
+  doing: 'DOING',
+  ai_done: 'AI_DONE',
+  done: 'DONE',
+  none: 'N/A',
+}
+
+function resolveSidebarAgentStatus(runtimeStatus: TerminalNodeData['status']): SidebarAgentStatus {
+  if (runtimeStatus === 'running' || runtimeStatus === 'restoring') {
+    return 'working'
+  }
+
+  return 'standby'
+}
+
+function resolveSidebarTaskStatusTone(taskStatus: SidebarTaskStatus): SidebarStatusTone {
+  switch (taskStatus) {
+    case 'doing':
+      return 'working'
+    case 'ai_done':
+      return 'done'
+    case 'done':
+      return 'done-strong'
+    case 'todo':
+    case 'none':
+    default:
+      return 'todo'
+  }
 }
 
 function App(): React.JSX.Element {
@@ -433,8 +479,43 @@ function App(): React.JSX.Element {
                       {workspaceAgents.map(node => {
                         const provider = node.data.agent?.provider
                         const providerText = provider ? AGENT_PROVIDER_LABEL[provider] : 'Agent'
-                        const statusText = node.data.status ?? 'running'
+                        const linkedTaskNode =
+                          (node.data.agent?.taskId
+                            ? (workspace.nodes.find(
+                                candidate =>
+                                  candidate.id === node.data.agent?.taskId &&
+                                  candidate.data.kind === 'task' &&
+                                  candidate.data.task,
+                              ) ?? null)
+                            : null) ??
+                          workspace.nodes.find(
+                            candidate =>
+                              candidate.data.kind === 'task' &&
+                              candidate.data.task?.linkedAgentNodeId === node.id,
+                          ) ??
+                          null
+                        const linkedTaskStatus =
+                          linkedTaskNode && linkedTaskNode.data.kind === 'task'
+                            ? (linkedTaskNode.data.task?.status ?? null)
+                            : null
+                        const sidebarAgentStatus = resolveSidebarAgentStatus(node.data.status)
+                        const sidebarAgentStatusText =
+                          SIDEBAR_AGENT_STATUS_LABEL[sidebarAgentStatus]
+                        const sidebarAgentStatusTone: SidebarStatusTone =
+                          sidebarAgentStatus === 'working' ? 'working' : 'standby'
+                        const sidebarTaskStatus: SidebarTaskStatus = linkedTaskStatus ?? 'none'
+                        const sidebarTaskStatusText = SIDEBAR_TASK_STATUS_LABEL[sidebarTaskStatus]
+                        const sidebarTaskStatusTone =
+                          resolveSidebarTaskStatusTone(sidebarTaskStatus)
                         const startedText = toRelativeTime(node.data.startedAt)
+                        const fallbackTaskTitle =
+                          node.data.agent?.prompt.trim().replace(/\s+/g, ' ') ?? ''
+                        const taskTitle =
+                          linkedTaskNode && linkedTaskNode.data.kind === 'task'
+                            ? linkedTaskNode.data.title
+                            : fallbackTaskTitle.length > 0
+                              ? fallbackTaskTitle
+                              : 'No linked task'
 
                         return (
                           <button
@@ -451,9 +532,26 @@ function App(): React.JSX.Element {
                               }))
                             }}
                           >
-                            <span className="workspace-agent-item__title">{node.data.title}</span>
+                            <span className="workspace-agent-item__headline">
+                              <span className="workspace-agent-item__title">{node.data.title}</span>
+                            </span>
                             <span className="workspace-agent-item__meta">
-                              {providerText} · {statusText} · {startedText}
+                              <span className="workspace-agent-item__meta-text">
+                                {providerText} · {startedText}
+                              </span>
+                              <span
+                                className={`workspace-agent-item__status workspace-agent-item__status--agent workspace-agent-item__status--${sidebarAgentStatusTone}`}
+                              >
+                                {sidebarAgentStatusText}
+                              </span>
+                            </span>
+                            <span className="workspace-agent-item__task" title={taskTitle}>
+                              <span className="workspace-agent-item__task-text">{taskTitle}</span>
+                              <span
+                                className={`workspace-agent-item__status workspace-agent-item__status--task workspace-agent-item__status--${sidebarTaskStatusTone}`}
+                              >
+                                {sidebarTaskStatusText}
+                              </span>
                             </span>
                           </button>
                         )
