@@ -266,7 +266,7 @@ function toSuggestedWorktreePath(workspacePath: string, provider: AgentProvider)
 }
 
 function shouldKeepSpace(space: WorkspaceSpaceState): boolean {
-  return space.nodeIds.length > 0 || space.rect !== null
+  return space.nodeIds.length > 0
 }
 
 function sanitizeSpaces(nextSpaces: WorkspaceSpaceState[]): WorkspaceSpaceState[] {
@@ -304,8 +304,7 @@ function WorkspaceCanvasInner({
     useState<TaskDeleteConfirmationState | null>(null)
   const [isMinimapVisible, setIsMinimapVisible] = useState(persistedMinimapVisible)
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
-  const [emptySelectionPrompt, setEmptySelectionPrompt] =
-    useState<EmptySelectionPromptState | null>(null)
+  const [, setEmptySelectionPrompt] = useState<EmptySelectionPromptState | null>(null)
   const [editingSpaceId, setEditingSpaceId] = useState<string | null>(null)
   const [spaceRenameDraft, setSpaceRenameDraft] = useState('')
 
@@ -1609,6 +1608,13 @@ function WorkspaceCanvasInner({
       const normalizedNodeIds = expandSelectionWithLinkedAgents(payload.nodeIds).filter(nodeId =>
         nodesRef.current.some(node => node.id === nodeId),
       )
+      if (normalizedNodeIds.length === 0) {
+        window.alert('Space must include at least one task or agent.')
+        setContextMenu(null)
+        setEmptySelectionPrompt(null)
+        return
+      }
+
       const targetDirectoryPath = workspacePath
       const validationError = validateSelectionForTargetDirectory(
         normalizedNodeIds,
@@ -1902,24 +1908,7 @@ function WorkspaceCanvasInner({
       if (selectedCount > 0) {
         return
       }
-
-      const minX = Math.min(draft.startX, draft.currentX)
-      const maxX = Math.max(draft.startX, draft.currentX)
-      const minY = Math.min(draft.startY, draft.currentY)
-      const maxY = Math.max(draft.startY, draft.currentY)
-      const startFlow = reactFlow.screenToFlowPosition({ x: minX, y: minY })
-      const endFlow = reactFlow.screenToFlowPosition({ x: maxX, y: maxY })
-
-      setEmptySelectionPrompt({
-        x: minX + (maxX - minX) / 2,
-        y: minY + (maxY - minY) / 2,
-        rect: {
-          x: startFlow.x,
-          y: startFlow.y,
-          width: Math.max(80, endFlow.x - startFlow.x),
-          height: Math.max(80, endFlow.y - startFlow.y),
-        },
-      })
+      setEmptySelectionPrompt(null)
     })
   }, [reactFlow])
 
@@ -1935,17 +1924,6 @@ function WorkspaceCanvasInner({
       rect: null,
     })
   }, [createSpace])
-
-  const createSpaceFromEmptySelection = useCallback(() => {
-    if (!emptySelectionPrompt) {
-      return
-    }
-
-    createSpace({
-      nodeIds: [],
-      rect: emptySelectionPrompt.rect,
-    })
-  }, [createSpace, emptySelectionPrompt])
 
   const createTerminalNode = useCallback(async () => {
     if (!contextMenu || contextMenu.kind !== 'pane') {
@@ -2996,6 +2974,23 @@ function WorkspaceCanvasInner({
       )
   }, [nodes, spaces])
 
+  const focusSpaceCenter = useCallback(
+    (spaceId: string): void => {
+      const targetSpace = spaceVisuals.find(space => space.id === spaceId)
+      if (!targetSpace) {
+        return
+      }
+
+      const centerX = targetSpace.rect.x + targetSpace.rect.width / 2
+      const centerY = targetSpace.rect.y + targetSpace.rect.height / 2
+      void reactFlow.setCenter(centerX, centerY, {
+        zoom: reactFlow.getZoom(),
+        duration: 220,
+      })
+    },
+    [reactFlow, spaceVisuals],
+  )
+
   return (
     <div
       ref={canvasRef}
@@ -3158,6 +3153,8 @@ function WorkspaceCanvasInner({
             data-testid="workspace-space-switch-all"
             onClick={() => {
               onActiveSpaceChange(null)
+              setEditingSpaceId(null)
+              setSpaceRenameDraft('')
             }}
           >
             All
@@ -3170,40 +3167,14 @@ function WorkspaceCanvasInner({
               data-testid={`workspace-space-switch-${space.id}`}
               onClick={() => {
                 onActiveSpaceChange(space.id)
+                focusSpaceCenter(space.id)
+                setEditingSpaceId(null)
+                setSpaceRenameDraft('')
               }}
             >
               {space.name}
             </button>
           ))}
-        </div>
-      ) : null}
-
-      {emptySelectionPrompt ? (
-        <div
-          className="workspace-empty-selection-prompt"
-          style={{ left: emptySelectionPrompt.x, top: emptySelectionPrompt.y }}
-          onClick={event => {
-            event.stopPropagation()
-          }}
-        >
-          <button
-            type="button"
-            data-testid="workspace-empty-selection-create-space"
-            onClick={() => {
-              createSpaceFromEmptySelection()
-            }}
-          >
-            Create Space
-          </button>
-          <button
-            type="button"
-            data-testid="workspace-empty-selection-cancel"
-            onClick={() => {
-              setEmptySelectionPrompt(null)
-            }}
-          >
-            Cancel
-          </button>
         </div>
       ) : null}
 

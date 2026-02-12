@@ -1083,7 +1083,7 @@ test.describe('Workspace Canvas Interactions', () => {
     }
   })
 
-  test('creates workspace from shift box selection on empty region', async () => {
+  test('does not allow creating space from empty shift box selection', async () => {
     const { electronApp, window } = await launchApp()
 
     try {
@@ -1106,11 +1106,27 @@ test.describe('Workspace Canvas Interactions', () => {
       await window.mouse.up()
       await window.keyboard.up('Shift')
 
-      const createButton = window.locator('[data-testid="workspace-empty-selection-create-space"]')
-      await expect(createButton).toBeVisible()
+      await expect(
+        window.locator('[data-testid="workspace-empty-selection-create-space"]'),
+      ).toHaveCount(0)
+      await expect(window.locator('.workspace-sidebar__space-label')).toHaveText('Space: All')
 
-      await createButton.click()
-      await expect(window.locator('.workspace-sidebar__space-label')).toContainText('Space')
+      const spaceCount = await window.evaluate(key => {
+        const raw = window.localStorage.getItem(key)
+        if (!raw) {
+          return 0
+        }
+
+        const parsed = JSON.parse(raw) as {
+          workspaces?: Array<{
+            spaces?: unknown[]
+          }>
+        }
+
+        return parsed.workspaces?.[0]?.spaces?.length ?? 0
+      }, storageKey)
+
+      expect(spaceCount).toBe(0)
     } finally {
       await electronApp.close()
     }
@@ -1240,6 +1256,81 @@ test.describe('Workspace Canvas Interactions', () => {
     }
   })
 
+  test('centers viewport when clicking a space switch item', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(
+        window,
+        [
+          {
+            id: 'space-focus-node',
+            title: 'terminal-space-focus',
+            position: { x: 1740, y: 1120 },
+            width: 460,
+            height: 300,
+          },
+        ],
+        {
+          spaces: [
+            {
+              id: 'space-focus',
+              name: 'Focus Scope',
+              directoryPath: testWorkspacePath,
+              nodeIds: ['space-focus-node'],
+              rect: {
+                x: 1700,
+                y: 1080,
+                width: 540,
+                height: 380,
+              },
+            },
+          ],
+          activeSpaceId: null,
+        },
+      )
+
+      const beforeViewport = await readCanvasViewport(window)
+      expect(Math.abs(beforeViewport.x)).toBeLessThan(40)
+      expect(Math.abs(beforeViewport.y)).toBeLessThan(40)
+
+      const canvasBounds = await window.evaluate(() => {
+        const surface = document.querySelector('.workspace-canvas .react-flow')
+        if (!(surface instanceof HTMLElement)) {
+          return null
+        }
+
+        return {
+          width: surface.clientWidth,
+          height: surface.clientHeight,
+        }
+      })
+
+      if (!canvasBounds) {
+        throw new Error('react-flow surface size unavailable')
+      }
+
+      const expectedCenterX = 1700 + 540 / 2
+      const expectedCenterY = 1080 + 380 / 2
+      const expectedViewportX = canvasBounds.width / 2 - expectedCenterX
+      const expectedViewportY = canvasBounds.height / 2 - expectedCenterY
+
+      await window.locator('[data-testid="workspace-space-switch-space-focus"]').click()
+      await expect(window.locator('.workspace-sidebar__space-label')).toHaveText(
+        'Space: Focus Scope',
+      )
+
+      await expect
+        .poll(async () => Math.abs((await readCanvasViewport(window)).x - expectedViewportX))
+        .toBeLessThan(42)
+      await expect
+        .poll(async () => Math.abs((await readCanvasViewport(window)).y - expectedViewportY))
+        .toBeLessThan(42)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
   test('blocks moving selected agent to workspace with different directory', async () => {
     const { electronApp, window } = await launchApp()
 
@@ -1274,21 +1365,21 @@ test.describe('Workspace Canvas Interactions', () => {
             },
             task: null,
           },
+          {
+            id: 'space-anchor-node',
+            title: 'terminal-space-anchor',
+            position: { x: 980, y: 240 },
+            width: 460,
+            height: 300,
+          },
         ],
         {
           spaces: [
             {
-              id: 'space-root',
-              name: 'Root Scope',
-              directoryPath: testWorkspacePath,
-              nodeIds: [],
-              rect: null,
-            },
-            {
               id: 'space-diff',
               name: 'Worktree Scope',
               directoryPath: `${testWorkspacePath}/.cove/worktrees/demo`,
-              nodeIds: [],
+              nodeIds: ['space-anchor-node'],
               rect: {
                 x: 900,
                 y: 220,

@@ -111,7 +111,7 @@ function sanitizeWorkspaceSpaces(spaces: WorkspaceState['spaces']): WorkspaceSta
       ...space,
       nodeIds: [...new Set(space.nodeIds)],
     }))
-    .filter(space => space.nodeIds.length > 0 || space.rect !== null)
+    .filter(space => space.nodeIds.length > 0)
 }
 
 type SidebarAgentStatus = 'working' | 'standby'
