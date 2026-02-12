@@ -314,6 +314,7 @@ function WorkspaceCanvasInner({
   const spaceRenameInputRef = useRef<HTMLInputElement | null>(null)
 
   const nodesRef = useRef(nodes)
+  const agentLaunchTokenByNodeIdRef = useRef<Map<string, number>>(new Map())
   const spacesRef = useRef(spaces)
   const selectedNodeIdsRef = useRef<string[]>([])
   const selectionDraftRef = useRef<SelectionDraftState | null>(null)
@@ -445,8 +446,20 @@ function WorkspaceCanvasInner({
     [setNodes],
   )
 
+  const bumpAgentLaunchToken = useCallback((nodeId: string): number => {
+    const next = (agentLaunchTokenByNodeIdRef.current.get(nodeId) ?? 0) + 1
+    agentLaunchTokenByNodeIdRef.current.set(nodeId, next)
+    return next
+  }, [])
+
+  const clearAgentLaunchToken = useCallback((nodeId: string): void => {
+    agentLaunchTokenByNodeIdRef.current.delete(nodeId)
+  }, [])
+
   const closeNode = useCallback(
     async (nodeId: string) => {
+      clearAgentLaunchToken(nodeId)
+
       const target = nodesRef.current.find(node => node.id === nodeId)
       if (target && target.data.sessionId.length > 0) {
         await window.coveApi.pty.kill({ sessionId: target.data.sessionId })
@@ -502,7 +515,7 @@ function WorkspaceCanvasInner({
           })
       })
     },
-    [setNodes],
+    [clearAgentLaunchToken, setNodes],
   )
 
   const normalizePosition = useCallback((nodeId: string, desired: Point, size: Size): Point => {
@@ -759,12 +772,26 @@ function WorkspaceCanvasInner({
         return
       }
 
+      const launchToken = bumpAgentLaunchToken(nodeId)
+
       if (launchData.shouldCreateDirectory && launchData.directoryMode === 'custom') {
         await window.coveApi.workspace.ensureDirectory({ path: launchData.executionDirectory })
+
+        if ((agentLaunchTokenByNodeIdRef.current.get(nodeId) ?? 0) !== launchToken) {
+          return
+        }
       }
 
       if (node.data.sessionId.length > 0) {
         await window.coveApi.pty.kill({ sessionId: node.data.sessionId })
+
+        if ((agentLaunchTokenByNodeIdRef.current.get(nodeId) ?? 0) !== launchToken) {
+          return
+        }
+      }
+
+      if ((agentLaunchTokenByNodeIdRef.current.get(nodeId) ?? 0) !== launchToken) {
+        return
       }
 
       setNodes(prevNodes =>
@@ -798,6 +825,16 @@ function WorkspaceCanvasInner({
           rows: 24,
         })
 
+        if ((agentLaunchTokenByNodeIdRef.current.get(nodeId) ?? 0) !== launchToken) {
+          void window.coveApi.pty.kill({ sessionId: launched.sessionId }).catch(() => undefined)
+          return
+        }
+
+        if (!nodesRef.current.some(item => item.id === nodeId)) {
+          void window.coveApi.pty.kill({ sessionId: launched.sessionId }).catch(() => undefined)
+          return
+        }
+
         setNodes(prevNodes =>
           prevNodes.map(item => {
             if (item.id !== nodeId) {
@@ -830,6 +867,10 @@ function WorkspaceCanvasInner({
           }),
         )
       } catch (error) {
+        if ((agentLaunchTokenByNodeIdRef.current.get(nodeId) ?? 0) !== launchToken) {
+          return
+        }
+
         const errorMessage = `Agent 启动失败：${toErrorMessage(error)}`
 
         setNodes(prevNodes =>
@@ -851,7 +892,7 @@ function WorkspaceCanvasInner({
         )
       }
     },
-    [buildAgentNodeTitle, setNodes],
+    [buildAgentNodeTitle, bumpAgentLaunchToken, setNodes],
   )
 
   const stopAgentNode = useCallback(
@@ -860,6 +901,8 @@ function WorkspaceCanvasInner({
       if (!node || node.data.kind !== 'agent') {
         return
       }
+
+      bumpAgentLaunchToken(nodeId)
 
       if (node.data.sessionId.length > 0) {
         await window.coveApi.pty.kill({ sessionId: node.data.sessionId })
@@ -883,7 +926,7 @@ function WorkspaceCanvasInner({
         }),
       )
     },
-    [setNodes],
+    [bumpAgentLaunchToken, setNodes],
   )
 
   const runTaskAgent = useCallback(
@@ -2702,6 +2745,10 @@ function WorkspaceCanvasInner({
       )
 
       if (removedIds.size > 0) {
+        removedIds.forEach(removedId => {
+          clearAgentLaunchToken(removedId)
+        })
+
         currentNodes.forEach(node => {
           if (!removedIds.has(node.id)) {
             return
@@ -2818,7 +2865,7 @@ function WorkspaceCanvasInner({
         window.dispatchEvent(new Event('cove:terminal-layout-sync'))
       }
     },
-    [applyPendingScrollbacks, normalizePosition, onNodesChange],
+    [applyPendingScrollbacks, clearAgentLaunchToken, normalizePosition, onNodesChange],
   )
 
   const launcherModelOptions = useMemo(() => {
