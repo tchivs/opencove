@@ -54,6 +54,15 @@ function resolveClaudeSessionFilePath(cwd: string, sessionId: string): string {
   return join(claudeProjectsDir, encodedPath, `${sessionId}.jsonl`)
 }
 
+async function ensureFileExists(filePath: string): Promise<string | null> {
+  try {
+    const stats = await fs.stat(filePath)
+    return stats.isFile() ? filePath : null
+  } catch {
+    return null
+  }
+}
+
 async function findCodexSessionFilePath(
   cwd: string,
   sessionId: string,
@@ -137,7 +146,8 @@ async function tryResolveSessionFilePath(
   startedAtMs: number,
 ): Promise<string | null> {
   if (provider === 'claude-code') {
-    return resolveClaudeSessionFilePath(cwd, sessionId)
+    const resolvedPath = resolveClaudeSessionFilePath(cwd, sessionId)
+    return await ensureFileExists(resolvedPath)
   }
 
   return await findCodexSessionFilePath(cwd, sessionId, startedAtMs)
