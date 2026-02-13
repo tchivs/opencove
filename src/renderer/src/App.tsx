@@ -22,6 +22,7 @@ import {
 } from './features/workspace/types'
 import {
   flushScheduledPersistedStateWrite,
+  type PersistWriteResult,
   readPersistedState,
   schedulePersistedStateWrite,
   toPersistedState,
@@ -43,6 +44,11 @@ interface FocusRequest {
   workspaceId: string
   nodeId: string
   sequence: number
+}
+
+interface PersistNotice {
+  tone: 'warning' | 'error'
+  message: string
 }
 
 function createInitialModelCatalog(): ProviderModelCatalog {
@@ -176,6 +182,7 @@ function App(): React.JSX.Element {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false)
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null)
+  const [persistNotice, setPersistNotice] = useState<PersistNotice | null>(null)
 
   const workspacesRef = useRef(workspaces)
   const activeWorkspaceIdRef = useRef(activeWorkspaceId)
@@ -199,6 +206,34 @@ function App(): React.JSX.Element {
 
   const requestPersistFlush = useCallback(() => {
     persistFlushRequestedRef.current = true
+  }, [])
+
+  const handlePersistWriteResult = useCallback((result: PersistWriteResult) => {
+    setPersistNotice(previous => {
+      if (result.ok) {
+        if (result.level === 'full') {
+          return null
+        }
+
+        const message =
+          result.level === 'no_scrollback'
+            ? 'Storage quota reached; saved without terminal history.'
+            : 'Storage quota reached; saved settings only.'
+
+        const next: PersistNotice = { tone: 'warning', message }
+        return previous?.tone === next.tone && previous.message === next.message ? previous : next
+      }
+
+      const message =
+        result.reason === 'unavailable'
+          ? 'Storage is unavailable; changes will not be saved.'
+          : result.reason === 'quota'
+            ? 'Storage quota exceeded; unable to persist workspace state.'
+            : `Persistence failed: ${result.message}`
+
+      const next: PersistNotice = { tone: 'error', message }
+      return previous?.tone === next.tone && previous.message === next.message ? previous : next
+    })
   }, [])
 
   useEffect(() => {
@@ -467,13 +502,20 @@ function App(): React.JSX.Element {
       return
     }
 
-    schedulePersistedStateWrite(producePersistedState)
+    schedulePersistedStateWrite(producePersistedState, { onResult: handlePersistWriteResult })
 
     if (persistFlushRequestedRef.current) {
       persistFlushRequestedRef.current = false
       flushScheduledPersistedStateWrite()
     }
-  }, [activeWorkspaceId, agentSettings, isHydrated, producePersistedState, workspaces])
+  }, [
+    activeWorkspaceId,
+    agentSettings,
+    handlePersistWriteResult,
+    isHydrated,
+    producePersistedState,
+    workspaces,
+  ])
 
   const refreshProviderModels = useCallback(async (provider: AgentProvider): Promise<void> => {
     const requestToken = providerModelsRequestStoreRef.current.start(provider)
@@ -757,6 +799,15 @@ function App(): React.JSX.Element {
             <span className="workspace-sidebar__agent-model">{activeProviderModel}</span>
           </div>
 
+          {persistNotice ? (
+            <div
+              className={`workspace-sidebar__persist-alert workspace-sidebar__persist-alert--${persistNotice.tone}`}
+            >
+              <strong>Persistence</strong>
+              <span>{persistNotice.message}</span>
+            </div>
+          ) : null}
+
           <div className="workspace-sidebar__list">
             {workspaces.length === 0 ? (
               <p className="workspace-sidebar__empty">No project yet.</p>
@@ -948,7 +999,10 @@ function App(): React.JSX.Element {
           }}
           onClose={() => {
             setIsSettingsOpen(false)
-            schedulePersistedStateWrite(producePersistedState, { delayMs: 0 })
+            schedulePersistedStateWrite(producePersistedState, {
+              delayMs: 0,
+              onResult: handlePersistWriteResult,
+            })
             flushScheduledPersistedStateWrite()
           }}
         />

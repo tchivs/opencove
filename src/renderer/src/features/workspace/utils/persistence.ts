@@ -28,6 +28,21 @@ import {
 const STORAGE_KEY = 'cove:m0:workspace-state'
 const DEFAULT_PERSIST_WRITE_DEBOUNCE_MS = 800
 
+export type PersistWriteLevel = 'full' | 'no_scrollback' | 'settings_only'
+export type PersistWriteFailureReason = 'unavailable' | 'quota' | 'unknown'
+
+export type PersistWriteResult =
+  | {
+      ok: true
+      level: PersistWriteLevel
+      bytes: number
+    }
+  | {
+      ok: false
+      reason: PersistWriteFailureReason
+      message: string
+    }
+
 const AGENT_RUNTIME_STATUSES: AgentRuntimeStatus[] = [
   'running',
   'exited',
@@ -51,6 +66,53 @@ function getStorage(): Storage | null {
     return window.localStorage ?? null
   } catch {
     return null
+  }
+}
+
+function isQuotaExceededError(error: unknown): boolean {
+  if (!error) {
+    return false
+  }
+
+  if (error instanceof DOMException) {
+    return error.name === 'QuotaExceededError'
+  }
+
+  const record = error as { name?: unknown; code?: unknown; message?: unknown }
+
+  if (record.name === 'QuotaExceededError' || record.code === 22) {
+    return true
+  }
+
+  return typeof record.message === 'string' && record.message.toLowerCase().includes('quota')
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`
+  }
+
+  return typeof error === 'string' ? error : 'Unknown error'
+}
+
+function stripScrollbackFromState(state: PersistedAppState): PersistedAppState {
+  return {
+    ...state,
+    workspaces: state.workspaces.map(workspace => ({
+      ...workspace,
+      nodes: workspace.nodes.map(node => ({
+        ...node,
+        scrollback: null,
+      })),
+    })),
+  }
+}
+
+function settingsOnlyState(state: PersistedAppState): PersistedAppState {
+  return {
+    activeWorkspaceId: state.activeWorkspaceId,
+    workspaces: [],
+    settings: state.settings,
   }
 }
 
@@ -468,44 +530,86 @@ export function readPersistedState(): PersistedAppState | null {
   }
 }
 
-export function writePersistedState(state: PersistedAppState): void {
+export function writePersistedState(state: PersistedAppState): PersistWriteResult {
   const storage = getStorage()
   if (!storage) {
-    return
+    return {
+      ok: false,
+      reason: 'unavailable',
+      message: 'Storage is unavailable; changes will not be saved.',
+    }
   }
 
+  const raw = JSON.stringify(state)
+
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    // Ignore persistence failures (quota exceeded, storage disabled, etc.)
+    storage.setItem(STORAGE_KEY, raw)
+    return { ok: true, level: 'full', bytes: raw.length }
+  } catch (error) {
+    if (!isQuotaExceededError(error)) {
+      return { ok: false, reason: 'unknown', message: toErrorMessage(error) }
+    }
+
+    try {
+      const degradedRaw = JSON.stringify(stripScrollbackFromState(state))
+      storage.setItem(STORAGE_KEY, degradedRaw)
+      return { ok: true, level: 'no_scrollback', bytes: degradedRaw.length }
+    } catch (degradedError) {
+      if (!isQuotaExceededError(degradedError)) {
+        return { ok: false, reason: 'unknown', message: toErrorMessage(degradedError) }
+      }
+    }
+
+    try {
+      const minimalRaw = JSON.stringify(settingsOnlyState(state))
+      storage.setItem(STORAGE_KEY, minimalRaw)
+      return { ok: true, level: 'settings_only', bytes: minimalRaw.length }
+    } catch (minimalError) {
+      return {
+        ok: false,
+        reason: isQuotaExceededError(minimalError) ? 'quota' : 'unknown',
+        message: toErrorMessage(minimalError),
+      }
+    }
   }
 }
 
-export function writeRawPersistedState(raw: string): void {
+export function writeRawPersistedState(raw: string): PersistWriteResult {
   const storage = getStorage()
   if (!storage) {
-    return
+    return {
+      ok: false,
+      reason: 'unavailable',
+      message: 'Storage is unavailable; changes will not be saved.',
+    }
   }
 
   try {
     storage.setItem(STORAGE_KEY, raw)
+    return { ok: true, level: 'full', bytes: raw.length }
   } catch {
-    // Ignore persistence failures (quota exceeded, storage disabled, etc.)
+    return {
+      ok: false,
+      reason: 'unknown',
+      message: 'Failed to write persisted state.',
+    }
   }
 }
 
 let scheduledPersistedStateProducer: (() => PersistedAppState) | null = null
 let scheduledPersistedStateTimer: number | null = null
+let scheduledPersistedStateOnResult: ((result: PersistWriteResult) => void) | null = null
 
 export function schedulePersistedStateWrite(
   producer: () => PersistedAppState,
-  options: { delayMs?: number } = {},
+  options: { delayMs?: number; onResult?: (result: PersistWriteResult) => void } = {},
 ): void {
   if (typeof window === 'undefined') {
     return
   }
 
   scheduledPersistedStateProducer = producer
+  scheduledPersistedStateOnResult = options.onResult ?? null
 
   if (scheduledPersistedStateTimer !== null) {
     return
@@ -527,11 +631,15 @@ export function flushScheduledPersistedStateWrite(): void {
   const producer = scheduledPersistedStateProducer
   scheduledPersistedStateProducer = null
 
+  const onResult = scheduledPersistedStateOnResult
+  scheduledPersistedStateOnResult = null
+
   if (!producer) {
     return
   }
 
-  writePersistedState(producer())
+  const result = writePersistedState(producer())
+  onResult?.(result)
 }
 
 export function toPersistedState(

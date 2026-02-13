@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC_CHANNELS } from '../shared/constants/ipc'
 import type {
+  AttachTerminalInput,
+  DetachTerminalInput,
   EnsureDirectoryInput,
   KillTerminalInput,
   LaunchAgentInput,
@@ -43,6 +45,10 @@ const coveApi = {
       ipcRenderer.invoke(IPC_CHANNELS.ptyResize, payload),
     kill: (payload: KillTerminalInput): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.ptyKill, payload),
+    attach: (payload: AttachTerminalInput): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ptyAttach, payload),
+    detach: (payload: DetachTerminalInput): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ptyDetach, payload),
     snapshot: (payload: SnapshotTerminalInput): Promise<SnapshotTerminalResult> =>
       ipcRenderer.invoke(IPC_CHANNELS.ptySnapshot, payload),
     onData: (listener: (event: TerminalDataEvent) => void): UnsubscribeFn => {

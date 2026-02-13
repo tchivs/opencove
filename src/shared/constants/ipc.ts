@@ -5,6 +5,8 @@ export const IPC_CHANNELS = {
   ptyWrite: 'pty:write',
   ptyResize: 'pty:resize',
   ptyKill: 'pty:kill',
+  ptyAttach: 'pty:attach',
+  ptyDetach: 'pty:detach',
   ptySnapshot: 'pty:snapshot',
   ptyData: 'pty:data',
   ptyExit: 'pty:exit',

@@ -1,5 +1,7 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
+  AttachTerminalInput,
+  DetachTerminalInput,
   EnsureDirectoryInput,
   KillTerminalInput,
   LaunchAgentInput,
@@ -34,6 +36,8 @@ export interface CoveApi {
     write: (payload: WriteTerminalInput) => Promise<void>
     resize: (payload: ResizeTerminalInput) => Promise<void>
     kill: (payload: KillTerminalInput) => Promise<void>
+    attach: (payload: AttachTerminalInput) => Promise<void>
+    detach: (payload: DetachTerminalInput) => Promise<void>
     snapshot: (payload: SnapshotTerminalInput) => Promise<SnapshotTerminalResult>
     onData: (listener: (event: TerminalDataEvent) => void) => UnsubscribeFn
     onExit: (listener: (event: TerminalExitEvent) => void) => UnsubscribeFn

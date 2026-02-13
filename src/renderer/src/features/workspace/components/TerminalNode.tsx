@@ -308,6 +308,13 @@ export function TerminalNode({
   }, [sessionId, shouldLockPtyRowShrink])
 
   useEffect(() => {
+    const ptyWithOptionalAttach = window.coveApi.pty as typeof window.coveApi.pty & {
+      attach?: (payload: { sessionId: string }) => Promise<void>
+      detach?: (payload: { sessionId: string }) => Promise<void>
+    }
+
+    void ptyWithOptionalAttach.attach?.({ sessionId })
+
     const terminal = new Terminal({
       cursorBlink: true,
       fontFamily:
@@ -419,6 +426,7 @@ export function TerminalNode({
 
     return () => {
       isDisposed = true
+      void ptyWithOptionalAttach.detach?.({ sessionId })
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleWindowFocus)
       window.removeEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync)

@@ -5,6 +5,8 @@ import type { IPty } from 'node-pty'
 import { IPC_CHANNELS } from '../../shared/constants/ipc'
 import type {
   AgentProviderId,
+  AttachTerminalInput,
+  DetachTerminalInput,
   EnsureDirectoryInput,
   KillTerminalInput,
   LaunchAgentInput,
@@ -163,6 +165,36 @@ function normalizeSnapshotPayload(payload: unknown): SnapshotTerminalInput {
   return { sessionId }
 }
 
+function normalizeAttachTerminalPayload(payload: unknown): AttachTerminalInput {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Invalid payload for pty:attach')
+  }
+
+  const record = payload as Record<string, unknown>
+  const sessionId = typeof record.sessionId === 'string' ? record.sessionId.trim() : ''
+
+  if (sessionId.length === 0) {
+    throw new Error('Invalid sessionId for pty:attach')
+  }
+
+  return { sessionId }
+}
+
+function normalizeDetachTerminalPayload(payload: unknown): DetachTerminalInput {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Invalid payload for pty:detach')
+  }
+
+  const record = payload as Record<string, unknown>
+  const sessionId = typeof record.sessionId === 'string' ? record.sessionId.trim() : ''
+
+  if (sessionId.length === 0) {
+    throw new Error('Invalid sessionId for pty:detach')
+  }
+
+  return { sessionId }
+}
+
 function reportDoneWatcherIssue(message: string): void {
   if (process.env.NODE_ENV === 'test') {
     return
@@ -232,6 +264,9 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
   const pendingPtyDataChunksBySession = new Map<string, string[]>()
   const pendingPtyDataCharsBySession = new Map<string, number>()
   const pendingPtyDataFlushTimerBySession = new Map<string, NodeJS.Timeout>()
+  const ptyDataSubscribersBySessionId = new Map<string, Set<number>>()
+  const ptyDataSessionsByWebContentsId = new Map<number, Set<string>>()
+  const ptyDataSubscribedWebContentsIds = new Set<number>()
 
   const PTY_DATA_FLUSH_DELAY_MS = 16
   const PTY_DATA_MAX_BATCH_CHARS = 64_000
@@ -244,6 +279,64 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
 
       try {
         content.send(channel, payload)
+      } catch {
+        // Ignore delivery failures (destroyed webContents, navigation in progress, etc.)
+      }
+    }
+  }
+
+  const cleanupPtyDataSubscriptions = (contentsId: number): void => {
+    const sessions = ptyDataSessionsByWebContentsId.get(contentsId)
+    if (!sessions) {
+      return
+    }
+
+    ptyDataSessionsByWebContentsId.delete(contentsId)
+
+    for (const sessionId of sessions) {
+      const subscribers = ptyDataSubscribersBySessionId.get(sessionId)
+      if (!subscribers) {
+        continue
+      }
+
+      subscribers.delete(contentsId)
+      if (subscribers.size === 0) {
+        ptyDataSubscribersBySessionId.delete(sessionId)
+      }
+    }
+  }
+
+  const trackWebContentsSubscriptionLifecycle = (contentsId: number): void => {
+    if (ptyDataSubscribedWebContentsIds.has(contentsId)) {
+      return
+    }
+
+    const content = webContents.fromId(contentsId)
+    if (!content) {
+      return
+    }
+
+    ptyDataSubscribedWebContentsIds.add(contentsId)
+    content.once('destroyed', () => {
+      ptyDataSubscribedWebContentsIds.delete(contentsId)
+      cleanupPtyDataSubscriptions(contentsId)
+    })
+  }
+
+  const sendPtyDataToSubscribers = (eventPayload: TerminalDataEvent): void => {
+    const subscribers = ptyDataSubscribersBySessionId.get(eventPayload.sessionId)
+    if (!subscribers || subscribers.size === 0) {
+      return
+    }
+
+    for (const contentsId of subscribers) {
+      const content = webContents.fromId(contentsId)
+      if (!content || content.isDestroyed() || content.getType() !== 'window') {
+        continue
+      }
+
+      try {
+        content.send(IPC_CHANNELS.ptyData, eventPayload)
       } catch {
         // Ignore delivery failures (destroyed webContents, navigation in progress, etc.)
       }
@@ -268,7 +361,7 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
     pendingPtyDataCharsBySession.delete(sessionId)
 
     const eventPayload: TerminalDataEvent = { sessionId, data: chunks.join('') }
-    sendToAllWindows(IPC_CHANNELS.ptyData, eventPayload)
+    sendPtyDataToSubscribers(eventPayload)
   }
 
   const queuePtyDataBroadcast = (sessionId: string, data: string): void => {
@@ -534,6 +627,37 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
     ptyManager.kill(payload.sessionId)
   })
 
+  ipcMain.handle(IPC_CHANNELS.ptyAttach, async (event, payload: AttachTerminalInput) => {
+    const normalized = normalizeAttachTerminalPayload(payload)
+    const contentsId = event.sender.id
+    trackWebContentsSubscriptionLifecycle(contentsId)
+
+    const sessions = ptyDataSessionsByWebContentsId.get(contentsId) ?? new Set<string>()
+    sessions.add(normalized.sessionId)
+    ptyDataSessionsByWebContentsId.set(contentsId, sessions)
+
+    const subscribers = ptyDataSubscribersBySessionId.get(normalized.sessionId) ?? new Set<number>()
+    subscribers.add(contentsId)
+    ptyDataSubscribersBySessionId.set(normalized.sessionId, subscribers)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ptyDetach, async (event, payload: DetachTerminalInput) => {
+    const normalized = normalizeDetachTerminalPayload(payload)
+    const contentsId = event.sender.id
+
+    const sessions = ptyDataSessionsByWebContentsId.get(contentsId)
+    sessions?.delete(normalized.sessionId)
+    if (sessions && sessions.size === 0) {
+      ptyDataSessionsByWebContentsId.delete(contentsId)
+    }
+
+    const subscribers = ptyDataSubscribersBySessionId.get(normalized.sessionId)
+    subscribers?.delete(contentsId)
+    if (subscribers && subscribers.size === 0) {
+      ptyDataSubscribersBySessionId.delete(normalized.sessionId)
+    }
+  })
+
   ipcMain.handle(
     IPC_CHANNELS.ptySnapshot,
     async (_event, payload: SnapshotTerminalInput): Promise<SnapshotTerminalResult> => {
@@ -650,6 +774,9 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
       pendingPtyDataFlushTimerBySession.clear()
       pendingPtyDataChunksBySession.clear()
       pendingPtyDataCharsBySession.clear()
+      ptyDataSubscribersBySessionId.clear()
+      ptyDataSessionsByWebContentsId.clear()
+      ptyDataSubscribedWebContentsIds.clear()
       terminalProbeBufferBySession.clear()
       isTerminalAttachedBySession.clear()
 
@@ -660,6 +787,8 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
       ipcMain.removeHandler(IPC_CHANNELS.ptyWrite)
       ipcMain.removeHandler(IPC_CHANNELS.ptyResize)
       ipcMain.removeHandler(IPC_CHANNELS.ptyKill)
+      ipcMain.removeHandler(IPC_CHANNELS.ptyAttach)
+      ipcMain.removeHandler(IPC_CHANNELS.ptyDetach)
       ipcMain.removeHandler(IPC_CHANNELS.ptySnapshot)
       ipcMain.removeHandler(IPC_CHANNELS.agentListModels)
       ipcMain.removeHandler(IPC_CHANNELS.agentLaunch)

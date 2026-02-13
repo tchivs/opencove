@@ -421,4 +421,82 @@ describe('workspace persistence', () => {
       value: previousStorage,
     })
   })
+
+  it('falls back to persisting without scrollback when quota is exceeded', () => {
+    const previousStorage = window.localStorage
+
+    class LimitedStorage extends MockStorage {
+      public constructor(private readonly maxBytes: number) {
+        super()
+      }
+
+      public override setItem(key: string, value: string): void {
+        if (value.length > this.maxBytes) {
+          const error =
+            typeof DOMException === 'undefined'
+              ? Object.assign(new Error('Quota exceeded'), { name: 'QuotaExceededError' })
+              : new DOMException('Quota exceeded', 'QuotaExceededError')
+          throw error
+        }
+
+        super.setItem(key, value)
+      }
+    }
+
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      writable: true,
+      value: new LimitedStorage(1500),
+    })
+
+    const state = toPersistedState(
+      [
+        {
+          id: 'workspace-1',
+          name: 'cove',
+          path: '/tmp/cove',
+          viewport: { x: 0, y: 0, zoom: 1 },
+          isMinimapVisible: true,
+          spaces: [],
+          activeSpaceId: null,
+          nodes: [
+            {
+              id: 'terminal-1',
+              type: 'terminalNode',
+              position: { x: 120, y: 120 },
+              data: {
+                sessionId: 'session-1',
+                title: 'terminal-1',
+                width: 460,
+                height: 300,
+                kind: 'terminal',
+                status: null,
+                startedAt: null,
+                endedAt: null,
+                exitCode: null,
+                lastError: null,
+                scrollback: 'x'.repeat(5000),
+                agent: null,
+                task: null,
+              },
+            },
+          ],
+        },
+      ],
+      'workspace-1',
+    )
+
+    const result = writePersistedState(state)
+    expect(result.ok).toBe(true)
+    expect(result.ok ? result.level : null).toBe('no_scrollback')
+
+    const restored = readPersistedState()
+    expect(restored?.workspaces[0]?.nodes[0]?.scrollback).toBeNull()
+
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      writable: true,
+      value: previousStorage,
+    })
+  })
 })

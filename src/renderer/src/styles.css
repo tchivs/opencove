@@ -117,6 +117,37 @@ body {
   color: #b7c8eb;
 }
 
+.workspace-sidebar__persist-alert {
+  border: 1px solid rgba(94, 123, 189, 0.4);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.workspace-sidebar__persist-alert strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e9f1ff;
+}
+
+.workspace-sidebar__persist-alert span {
+  color: #b7c8eb;
+}
+
+.workspace-sidebar__persist-alert--warning {
+  border-color: rgba(255, 199, 0, 0.45);
+  background: rgba(255, 199, 0, 0.08);
+}
+
+.workspace-sidebar__persist-alert--error {
+  border-color: rgba(255, 88, 124, 0.5);
+  background: rgba(255, 88, 124, 0.1);
+}
+
 .workspace-sidebar__list {
   display: flex;
   flex-direction: column;
