@@ -50,7 +50,7 @@ export function useWorkspaceCanvasApplyNodeChanges({
           }
 
           if (node.data.sessionId.length > 0) {
-            void window.coveApi.pty.kill({ sessionId: node.data.sessionId })
+            void window.coveApi.pty.kill({ sessionId: node.data.sessionId }).catch(() => undefined)
           }
         })
       }

@@ -17,6 +17,33 @@ import { getStatusClassName, getStatusLabel } from './terminalNode/status'
 import { useTerminalScrollback } from './terminalNode/useScrollback'
 import { shouldStopWheelPropagation } from './terminalNode/wheel'
 
+function resolveSuffixPrefixOverlap(left: string, right: string): number {
+  if (left.length === 0 || right.length === 0) {
+    return 0
+  }
+
+  const max = Math.min(left.length, right.length)
+  const leftTail = left.slice(-max)
+  const rightPrefix = right.slice(0, max)
+  const combined = `${rightPrefix}\u0000${leftTail}`
+
+  const prefix = new Uint32Array(combined.length)
+  let cursor = 0
+
+  for (let index = 1; index < combined.length; index += 1) {
+    while (cursor > 0 && combined[index] !== combined[cursor]) {
+      cursor = prefix[cursor - 1]
+    }
+
+    if (combined[index] === combined[cursor]) {
+      cursor += 1
+      prefix[index] = cursor
+    }
+  }
+
+  return prefix[combined.length - 1]
+}
+
 interface TerminalNodeProps {
   sessionId: string
   title: string
@@ -159,8 +186,6 @@ export function TerminalNode({
       detach?: (payload: { sessionId: string }) => Promise<void>
     }
 
-    void ptyWithOptionalAttach.attach?.({ sessionId })
-
     const terminal = new Terminal({
       cursorBlink: true,
       fontFamily:
@@ -199,34 +224,79 @@ export function TerminalNode({
       void window.coveApi.pty.write({ sessionId, data })
     })
 
-    let unsubscribeData: (() => void) | null = null
-    let unsubscribeExit: (() => void) | null = null
     let isDisposed = false
+    let isHydrating = true
+    const bufferedDataChunks: string[] = []
+    let bufferedExitCode: number | null = null
 
-    const bindSessionEvents = () => {
-      unsubscribeData = window.coveApi.pty.onData(event => {
-        if (event.sessionId !== sessionId) {
-          return
+    const unsubscribeData = window.coveApi.pty.onData(event => {
+      if (event.sessionId !== sessionId) {
+        return
+      }
+
+      if (isHydrating) {
+        bufferedDataChunks.push(event.data)
+        return
+      }
+
+      terminal.write(event.data)
+      scrollbackBufferRef.current.append(event.data)
+      markScrollbackDirty()
+    })
+
+    const unsubscribeExit = window.coveApi.pty.onExit(event => {
+      if (event.sessionId !== sessionId) {
+        return
+      }
+
+      if (isHydrating) {
+        bufferedExitCode = event.exitCode
+        return
+      }
+
+      const exitMessage = `\\r\\n[process exited with code ${event.exitCode}]\\r\\n`
+      terminal.write(exitMessage)
+      scrollbackBufferRef.current.append(exitMessage)
+      markScrollbackDirty(true)
+    })
+
+    const attachPromise = Promise.resolve(ptyWithOptionalAttach.attach?.({ sessionId }))
+
+    const finalizeHydration = (snapshot: string): void => {
+      if (isDisposed) {
+        return
+      }
+
+      scrollbackBufferRef.current.set(snapshot)
+      isHydrating = false
+
+      const bufferedData = bufferedDataChunks.join('')
+      bufferedDataChunks.length = 0
+
+      if (bufferedData.length > 0) {
+        const overlap = resolveSuffixPrefixOverlap(snapshot, bufferedData)
+        const remainder = bufferedData.slice(overlap)
+
+        if (remainder.length > 0) {
+          terminal.write(remainder)
+          scrollbackBufferRef.current.append(remainder)
         }
+      }
 
-        terminal.write(event.data)
-        scrollbackBufferRef.current.append(event.data)
-        markScrollbackDirty()
-      })
-
-      unsubscribeExit = window.coveApi.pty.onExit(event => {
-        if (event.sessionId !== sessionId) {
-          return
-        }
-
-        const exitMessage = `\\r\\n[process exited with code ${event.exitCode}]\\r\\n`
+      if (bufferedExitCode !== null) {
+        const exitMessage = `\\r\\n[process exited with code ${bufferedExitCode}]\\r\\n`
+        bufferedExitCode = null
         terminal.write(exitMessage)
         scrollbackBufferRef.current.append(exitMessage)
-        markScrollbackDirty(true)
-      })
+      }
+
+      markScrollbackDirty(true)
+      syncTerminalSize()
     }
 
     const hydrateFromSnapshot = async () => {
+      await attachPromise.catch(() => undefined)
+
       const persistedSnapshot = scrollbackBufferRef.current.snapshot()
       let mergedSnapshot = persistedSnapshot
 
@@ -244,15 +314,12 @@ export function TerminalNode({
       if (mergedSnapshot.length > 0) {
         terminal.write(mergedSnapshot, () => {
           shouldForwardTerminalData = true
+          finalizeHydration(mergedSnapshot)
         })
       } else {
         shouldForwardTerminalData = true
+        finalizeHydration(mergedSnapshot)
       }
-
-      scrollbackBufferRef.current.set(mergedSnapshot)
-      markScrollbackDirty(true)
-      bindSessionEvents()
-      syncTerminalSize()
     }
 
     void hydrateFromSnapshot()
@@ -285,14 +352,15 @@ export function TerminalNode({
 
     return () => {
       isDisposed = true
-      void ptyWithOptionalAttach.detach?.({ sessionId })
+      const detachPromise = ptyWithOptionalAttach.detach?.({ sessionId })
+      void detachPromise?.catch(() => undefined)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleWindowFocus)
       window.removeEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync)
       resizeObserver.disconnect()
       disposable.dispose()
-      unsubscribeData?.()
-      unsubscribeExit?.()
+      unsubscribeData()
+      unsubscribeExit()
       disposeScrollbackPublish()
       terminal.dispose()
       terminalRef.current = null

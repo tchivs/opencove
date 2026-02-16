@@ -91,6 +91,23 @@ export function createPtyRuntime(): PtyRuntime {
     }
   }
 
+  const cleanupSessionPtyDataSubscriptions = (sessionId: string): void => {
+    const subscribers = ptyDataSubscribersBySessionId.get(sessionId)
+    if (!subscribers) {
+      return
+    }
+
+    ptyDataSubscribersBySessionId.delete(sessionId)
+
+    for (const contentsId of subscribers) {
+      const sessions = ptyDataSessionsByWebContentsId.get(contentsId)
+      sessions?.delete(sessionId)
+      if (sessions && sessions.size === 0) {
+        ptyDataSessionsByWebContentsId.delete(contentsId)
+      }
+    }
+  }
+
   const trackWebContentsSubscriptionLifecycle = (contentsId: number): void => {
     if (ptyDataSubscribedWebContentsIds.has(contentsId)) {
       return
@@ -332,6 +349,7 @@ export function createPtyRuntime(): PtyRuntime {
       flushPtyDataBroadcast(sessionId)
       clearSessionProbeState(sessionId)
       clearSessionDoneWatcher(sessionId)
+      cleanupSessionPtyDataSubscriptions(sessionId)
       ptyManager.delete(sessionId)
       const eventPayload: TerminalExitEvent = {
         sessionId,
@@ -360,6 +378,7 @@ export function createPtyRuntime(): PtyRuntime {
       flushPtyDataBroadcast(sessionId)
       clearSessionProbeState(sessionId)
       clearSessionDoneWatcher(sessionId)
+      cleanupSessionPtyDataSubscriptions(sessionId)
       ptyManager.kill(sessionId)
     },
     attach: (contentsId, sessionId) => {

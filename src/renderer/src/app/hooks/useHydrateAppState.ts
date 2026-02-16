@@ -15,6 +15,40 @@ function isFulfilled<T>(result: PromiseSettledResult<T>): result is PromiseFulfi
   return result.status === 'fulfilled'
 }
 
+function mergeHydratedWorkspaceState(
+  current: WorkspaceState,
+  hydrated: WorkspaceState,
+): WorkspaceState {
+  if (current.id !== hydrated.id) {
+    return current
+  }
+
+  const existingNodeIds = new Set(current.nodes.map(node => node.id))
+  const mergedNodes = current.nodes.concat(
+    hydrated.nodes.filter(node => !existingNodeIds.has(node.id)),
+  )
+
+  const validNodeIds = new Set(mergedNodes.map(node => node.id))
+  const nextSpaces = sanitizeWorkspaceSpaces(
+    current.spaces.map(space => ({
+      ...space,
+      nodeIds: space.nodeIds.filter(nodeId => validNodeIds.has(nodeId)),
+    })),
+  )
+
+  const nextActiveSpaceId =
+    current.activeSpaceId !== null && nextSpaces.some(space => space.id === current.activeSpaceId)
+      ? current.activeSpaceId
+      : null
+
+  return {
+    ...current,
+    nodes: mergedNodes,
+    spaces: nextSpaces,
+    activeSpaceId: nextActiveSpaceId,
+  }
+}
+
 export function useHydrateAppState({
   setAgentSettings,
   setWorkspaces,
@@ -216,7 +250,9 @@ export function useHydrateAppState({
 
       setWorkspaces(previous =>
         previous.map(workspace =>
-          workspace.id === hydratedWorkspace.id ? hydratedWorkspace : workspace,
+          workspace.id === hydratedWorkspace.id
+            ? mergeHydratedWorkspaceState(workspace, hydratedWorkspace)
+            : workspace,
         ),
       )
     }
@@ -252,7 +288,14 @@ export function useHydrateAppState({
         hydratedRemainingWorkspaces.map(workspace => [workspace.id, workspace]),
       )
       setWorkspaces(previous =>
-        previous.map(workspace => hydratedWorkspaceById.get(workspace.id) ?? workspace),
+        previous.map(workspace => {
+          const hydratedWorkspace = hydratedWorkspaceById.get(workspace.id)
+          if (!hydratedWorkspace) {
+            return workspace
+          }
+
+          return mergeHydratedWorkspaceState(workspace, hydratedWorkspace)
+        }),
       )
     }
 
