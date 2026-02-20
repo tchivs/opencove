@@ -12,6 +12,10 @@ import {
   TERMINAL_LAYOUT_SYNC_EVENT,
   type ResizeAxis,
 } from './terminalNode/constants'
+import {
+  createTerminalCommandInputState,
+  parseTerminalCommandInput,
+} from './terminalNode/commandInput'
 import { mergeScrollbackSnapshots } from './terminalNode/scrollback'
 import { TerminalNodeHeader } from './terminalNode/TerminalNodeHeader'
 import { resolveSuffixPrefixOverlap } from './terminalNode/overlap'
@@ -30,6 +34,7 @@ interface TerminalNodeProps {
   onClose: () => void
   onResize: (size: { width: number; height: number }) => void
   onScrollbackChange?: (scrollback: string) => void
+  onCommandRun?: (command: string) => void
   onInteractionStart?: () => void
   onStop?: () => void
   onRerun?: () => void
@@ -48,6 +53,7 @@ export function TerminalNode({
   onClose,
   onResize,
   onScrollbackChange,
+  onCommandRun,
   onInteractionStart,
   onStop,
   onRerun,
@@ -65,6 +71,7 @@ export function TerminalNode({
   } | null>(null)
   const isPointerResizingRef = useRef(false)
   const lastSyncedPtySizeRef = useRef<{ cols: number; rows: number } | null>(null)
+  const commandInputStateRef = useRef(createTerminalCommandInputState())
 
   const {
     scrollbackBufferRef,
@@ -98,6 +105,7 @@ export function TerminalNode({
 
   useEffect(() => {
     lastSyncedPtySizeRef.current = null
+    commandInputStateRef.current = createTerminalCommandInputState()
   }, [sessionId])
 
   const renderedSize = draftSize ?? { width, height }
@@ -190,6 +198,12 @@ export function TerminalNode({
       if (!shouldForwardTerminalData) {
         return
       }
+
+      const parsed = parseTerminalCommandInput(data, commandInputStateRef.current)
+      commandInputStateRef.current = parsed.nextState
+      parsed.commands.forEach(command => {
+        onCommandRun?.(command)
+      })
 
       void window.coveApi.pty.write({ sessionId, data })
     })
@@ -339,6 +353,7 @@ export function TerminalNode({
   }, [
     disposeScrollbackPublish,
     markScrollbackDirty,
+    onCommandRun,
     scrollbackBufferRef,
     sessionId,
     syncTerminalSize,

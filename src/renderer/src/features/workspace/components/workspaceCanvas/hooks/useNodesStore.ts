@@ -34,6 +34,7 @@ export function useWorkspaceCanvasNodesStore({
   resizeNode: (nodeId: string, desiredSize: Size) => void
   applyPendingScrollbacks: (targetNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[]
   updateNodeScrollback: (nodeId: string, scrollback: string) => void
+  updateTerminalTitle: (nodeId: string, title: string) => void
   createNodeForSession: (input: CreateNodeInput) => Promise<Node<TerminalNodeData> | null>
   createTaskNode: (
     anchor: Point,
@@ -270,6 +271,44 @@ export function useWorkspaceCanvasNodesStore({
     [setNodes],
   )
 
+  const updateTerminalTitle = useCallback(
+    (nodeId: string, title: string) => {
+      const normalizedTitle = title.trim()
+      if (normalizedTitle.length === 0) {
+        return
+      }
+
+      setNodes(
+        prevNodes => {
+          let hasChanged = false
+
+          const nextNodes = prevNodes.map(node => {
+            if (node.id !== nodeId || node.data.kind !== 'terminal') {
+              return node
+            }
+
+            if (node.data.title === normalizedTitle) {
+              return node
+            }
+
+            hasChanged = true
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                title: normalizedTitle,
+              },
+            }
+          })
+
+          return hasChanged ? nextNodes : prevNodes
+        },
+        { syncLayout: false },
+      )
+    },
+    [setNodes],
+  )
+
   const createNodeForSession = useCallback(
     async ({
       sessionId,
@@ -394,6 +433,7 @@ export function useWorkspaceCanvasNodesStore({
     resizeNode,
     applyPendingScrollbacks,
     updateNodeScrollback,
+    updateTerminalTitle,
     createNodeForSession,
     createTaskNode,
   }
