@@ -4,7 +4,11 @@ import type { Point, Size, TerminalNodeData, TaskPriority } from '../../../types
 import { useScrollbackStore } from '../../../store/useScrollbackStore'
 import { clampSizeToNonOverlapping, findNearestFreePosition } from '../../../utils/collision'
 import { scheduleNodeScrollbackWrite } from '../../../utils/persistence/scrollbackSchedule'
-import { MIN_SIZE, resolveDefaultTaskWindowSize, resolveDefaultTerminalWindowSize } from '../constants'
+import {
+  MIN_SIZE,
+  resolveDefaultTaskWindowSize,
+  resolveDefaultTerminalWindowSize,
+} from '../constants'
 import type { CreateNodeInput } from '../types'
 import { removeNodeWithRelations } from './useNodesStore.closeNode'
 import { clampSizeToContainingSpace } from './useNodesStore.clampSizeToSpace'

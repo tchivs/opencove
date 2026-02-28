@@ -52,15 +52,11 @@ function resolvePositiveDimension(value: number | undefined, fallback: number): 
 
 function resolveViewportSize(viewport?: Partial<Size>): Size {
   const fallbackWidth =
-    typeof window !== 'undefined' &&
-    Number.isFinite(window.innerWidth) &&
-    window.innerWidth > 0
+    typeof window !== 'undefined' && Number.isFinite(window.innerWidth) && window.innerWidth > 0
       ? window.innerWidth
       : DEFAULT_VIEWPORT_SIZE.width
   const fallbackHeight =
-    typeof window !== 'undefined' &&
-    Number.isFinite(window.innerHeight) &&
-    window.innerHeight > 0
+    typeof window !== 'undefined' && Number.isFinite(window.innerHeight) && window.innerHeight > 0
       ? window.innerHeight
       : DEFAULT_VIEWPORT_SIZE.height
 

@@ -137,4 +137,3 @@ describe('WorkspaceCanvas task run agent auto resize', () => {
     expect(nextSpace?.rect?.height).toBeGreaterThan(initialRect.height)
   })
 })
-

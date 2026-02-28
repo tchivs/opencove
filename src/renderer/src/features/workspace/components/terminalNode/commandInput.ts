@@ -37,7 +37,10 @@ function clampCursorIndex(buffer: string, cursorIndex: number): number {
   return cursorIndex
 }
 
-function trimBufferToMaxChars(buffer: string, cursorIndex: number): {
+function trimBufferToMaxChars(
+  buffer: string,
+  cursorIndex: number,
+): {
   nextBuffer: string
   nextCursorIndex: number
 } {

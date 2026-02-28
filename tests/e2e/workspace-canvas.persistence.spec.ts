@@ -136,7 +136,8 @@ test.describe('Workspace Canvas - Persistence', () => {
         .poll(
           async () => {
             return await window.evaluate(
-              () => (window as unknown as { __coveTestExitCode?: number | null }).__coveTestExitCode,
+              () =>
+                (window as unknown as { __coveTestExitCode?: number | null }).__coveTestExitCode,
             )
           },
           { timeout: 10_000 },

@@ -407,10 +407,7 @@ export function TerminalNode({
 
       {isAgentNode && lastError ? <div className="terminal-node__error">{lastError}</div> : null}
 
-      <div
-        ref={containerRef}
-        className="terminal-node__terminal nodrag"
-      />
+      <div ref={containerRef} className="terminal-node__terminal nodrag" />
       <button
         type="button"
         className="terminal-node__resizer terminal-node__resizer--right nodrag"
