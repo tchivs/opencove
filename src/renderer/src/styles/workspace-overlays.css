@@ -202,6 +202,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .workspace-space-switcher__item--active {
