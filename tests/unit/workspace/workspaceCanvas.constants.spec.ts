@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_TASK_WINDOW_MAX_SIZE,
   resolveDefaultTerminalWindowSize,
+  resolveDefaultTaskWindowSize,
   DEFAULT_TERMINAL_WINDOW_BASE_SIZE,
+  DEFAULT_TERMINAL_WINDOW_MAX_SIZE,
 } from '../../../src/renderer/src/features/workspace/components/workspaceCanvas/constants'
 
 describe('workspace canvas default terminal sizing', () => {
@@ -22,9 +25,23 @@ describe('workspace canvas default terminal sizing', () => {
       width: 468,
       height: 360,
     })
-    expect(tooLarge).toEqual({
-      width: 936,
-      height: 720,
+    expect(tooLarge).toEqual(DEFAULT_TERMINAL_WINDOW_MAX_SIZE)
+  })
+})
+
+describe('workspace canvas default task sizing', () => {
+  it('resolves task window size from viewport ratio', () => {
+    const size = resolveDefaultTaskWindowSize({ width: 1920, height: 1080 })
+
+    expect(size).toEqual({
+      width: 576,
+      height: 864,
     })
+  })
+
+  it('clamps task window defaults to the maximum pixel limit', () => {
+    const size = resolveDefaultTaskWindowSize({ width: 6000, height: 3000 })
+
+    expect(size).toEqual(DEFAULT_TASK_WINDOW_MAX_SIZE)
   })
 })

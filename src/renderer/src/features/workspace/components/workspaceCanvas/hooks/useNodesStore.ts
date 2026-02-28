@@ -4,7 +4,7 @@ import type { Point, Size, TerminalNodeData, TaskPriority } from '../../../types
 import { useScrollbackStore } from '../../../store/useScrollbackStore'
 import { clampSizeToNonOverlapping, findNearestFreePosition } from '../../../utils/collision'
 import { scheduleNodeScrollbackWrite } from '../../../utils/persistence/scrollbackSchedule'
-import { MIN_SIZE, TASK_SIZE, resolveDefaultTerminalWindowSize } from '../constants'
+import { MIN_SIZE, resolveDefaultTaskWindowSize, resolveDefaultTerminalWindowSize } from '../constants'
 import type { CreateNodeInput } from '../types'
 import { removeNodeWithRelations } from './useNodesStore.closeNode'
 import { clampSizeToContainingSpace } from './useNodesStore.clampSizeToSpace'
@@ -374,9 +374,11 @@ export function useWorkspaceCanvasNodesStore({
       priority: TaskPriority,
       tags: string[],
     ): Node<TerminalNodeData> | null => {
+      const defaultTaskSize = resolveDefaultTaskWindowSize()
+
       const { placement, canPlace } = resolveNodesPlacement({
         anchor,
-        size: TASK_SIZE,
+        size: defaultTaskSize,
         getNodes: () => nodesRef.current,
         pushBlockingWindowsRight,
       })
@@ -396,8 +398,8 @@ export function useWorkspaceCanvasNodesStore({
           sessionId: '',
           title,
           titlePinnedByUser: false,
-          width: TASK_SIZE.width,
-          height: TASK_SIZE.height,
+          width: defaultTaskSize.width,
+          height: defaultTaskSize.height,
           kind: 'task',
           status: null,
           startedAt: null,
