@@ -15,6 +15,7 @@ function TerminalNodeType({
   data,
   id,
   terminalFontSize,
+  selectNode,
   closeNodeRef,
   resizeNodeRef,
   updateNodeScrollbackRef,
@@ -25,6 +26,7 @@ function TerminalNodeType({
   data: TerminalNodeData
   id: string
   terminalFontSize: number
+  selectNode: (nodeId: string) => void
   closeNodeRef: MutableRefObject<(nodeId: string) => Promise<void>>
   resizeNodeRef: MutableRefObject<(nodeId: string, desiredSize: Size) => void>
   updateNodeScrollbackRef: MutableRefObject<UpdateNodeScrollback>
@@ -82,7 +84,10 @@ function TerminalNodeType({
             }
           : undefined
       }
-      onInteractionStart={() => normalizeViewportForTerminalInteractionRef.current(id)}
+      onInteractionStart={() => {
+        selectNode(id)
+        normalizeViewportForTerminalInteractionRef.current(id)
+      }}
     />
   )
 }
@@ -92,6 +97,7 @@ interface WorkspaceCanvasNodeTypesParams {
   spacesRef: MutableRefObject<WorkspaceSpaceState[]>
   workspacePath: string
   terminalFontSize: number
+  selectNode: (nodeId: string) => void
   closeNodeRef: MutableRefObject<(nodeId: string) => Promise<void>>
   resizeNodeRef: MutableRefObject<(nodeId: string, desiredSize: Size) => void>
   updateNodeScrollbackRef: MutableRefObject<UpdateNodeScrollback>
@@ -116,6 +122,7 @@ export function useWorkspaceCanvasNodeTypes({
   spacesRef,
   workspacePath,
   terminalFontSize,
+  selectNode,
   closeNodeRef,
   resizeNodeRef,
   updateNodeScrollbackRef,
@@ -143,6 +150,7 @@ export function useWorkspaceCanvasNodeTypes({
             data={data}
             id={id}
             terminalFontSize={terminalFontSize}
+            selectNode={selectNode}
             closeNodeRef={closeNodeRef}
             resizeNodeRef={resizeNodeRef}
             updateNodeScrollbackRef={updateNodeScrollbackRef}
@@ -227,6 +235,9 @@ export function useWorkspaceCanvasNodeTypes({
             onRemoveAgentSessionRecord={recordId => {
               removeTaskAgentSessionRecordRef.current(id, recordId)
             }}
+            onInteractionStart={() => {
+              selectNode(id)
+            }}
           />
         )
       },
@@ -235,6 +246,7 @@ export function useWorkspaceCanvasNodeTypes({
       closeNodeRef,
       normalizeViewportForTerminalInteractionRef,
       nodesRef,
+      selectNode,
       spacesRef,
       workspacePath,
       terminalFontSize,

@@ -380,6 +380,13 @@ export function TerminalNode({
     <div
       className="terminal-node nowheel"
       style={sizeStyle}
+      onMouseDownCapture={event => {
+        if (event.button !== 0) {
+          return
+        }
+
+        onInteractionStart?.()
+      }}
       onWheel={event => {
         if (shouldStopWheelPropagation(event.currentTarget)) {
           event.stopPropagation()
@@ -403,13 +410,6 @@ export function TerminalNode({
       <div
         ref={containerRef}
         className="terminal-node__terminal nodrag"
-        onPointerDown={event => {
-          if (event.button !== 0) {
-            return
-          }
-
-          onInteractionStart?.()
-        }}
       />
       <button
         type="button"

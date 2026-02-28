@@ -50,6 +50,7 @@ interface TaskNodeProps {
   onStatusChange: (status: TaskRuntimeStatus) => void
   onResumeAgentSession: (recordId: string) => void
   onRemoveAgentSessionRecord: (recordId: string) => void
+  onInteractionStart?: () => void
 }
 
 type ResizeAxis = 'horizontal' | 'vertical'
@@ -78,6 +79,7 @@ export function TaskNode({
   onStatusChange,
   onResumeAgentSession,
   onRemoveAgentSessionRecord,
+  onInteractionStart,
 }: TaskNodeProps): JSX.Element {
   const resizeStartRef = useRef<{
     x: number
@@ -236,6 +238,13 @@ export function TaskNode({
     <div
       className="task-node nowheel"
       style={style}
+      onMouseDownCapture={event => {
+        if (event.button !== 0) {
+          return
+        }
+
+        onInteractionStart?.()
+      }}
       onWheel={event => {
         if (shouldStopWheelPropagation(event.currentTarget)) {
           event.stopPropagation()

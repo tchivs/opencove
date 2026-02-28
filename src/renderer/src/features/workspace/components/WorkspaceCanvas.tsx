@@ -322,11 +322,51 @@ function WorkspaceCanvasInner({
 
   useWorkspaceCanvasPtyTaskCompletion({ setNodes })
 
+  const selectNode = useCallback(
+    (nodeId: string) => {
+      setNodes(
+        prevNodes => {
+          const isAlreadySelected = prevNodes.some(node => node.id === nodeId && node.selected)
+          if (isAlreadySelected) {
+            return prevNodes
+          }
+
+          let hasChanged = false
+          const nextNodes = prevNodes.map(node => {
+            const shouldSelect = node.id === nodeId
+            if (node.selected === shouldSelect) {
+              return node
+            }
+
+            hasChanged = true
+            return {
+              ...node,
+              selected: shouldSelect,
+            }
+          })
+
+          return hasChanged ? nextNodes : prevNodes
+        },
+        { syncLayout: false },
+      )
+
+      setSelectedNodeIds(previous => {
+        if (previous.includes(nodeId)) {
+          return previous
+        }
+
+        return [nodeId]
+      })
+    },
+    [setNodes],
+  )
+
   const nodeTypes = useWorkspaceCanvasNodeTypes({
     nodesRef,
     spacesRef,
     workspacePath,
     terminalFontSize: agentSettings.terminalFontSize,
+    selectNode,
     ...actionRefs,
   })
 

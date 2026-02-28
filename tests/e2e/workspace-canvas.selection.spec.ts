@@ -257,4 +257,71 @@ test.describe('Workspace Canvas - Selection', () => {
       await electronApp.close()
     }
   })
+
+  test('switches selected window on body click without moving canvas', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(
+        window,
+        [
+          {
+            id: 'mouse-window-switch-node-a',
+            title: 'terminal-mouse-window-switch-a',
+            position: { x: 220, y: 180 },
+            width: 460,
+            height: 300,
+          },
+          {
+            id: 'mouse-window-switch-node-b',
+            title: 'terminal-mouse-window-switch-b',
+            position: { x: 560, y: 180 },
+            width: 460,
+            height: 300,
+          },
+        ],
+        {
+          settings: {
+            canvasInputMode: 'mouse',
+          },
+        },
+      )
+
+      const firstNode = window
+        .locator('.react-flow__node')
+        .filter({ hasText: 'terminal-mouse-window-switch-a' })
+        .first()
+      const secondNode = window
+        .locator('.react-flow__node')
+        .filter({ hasText: 'terminal-mouse-window-switch-b' })
+        .first()
+
+      const firstNodeBox = await firstNode.boundingBox()
+      if (!firstNodeBox) {
+        throw new Error('first node bounding box unavailable')
+      }
+
+      const secondNodeBox = await secondNode.boundingBox()
+      if (!secondNodeBox) {
+        throw new Error('second node bounding box unavailable')
+      }
+
+      await window.mouse.click(firstNodeBox.x + 10, firstNodeBox.y + 10)
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
+      await expect(
+        window.locator('.react-flow__node.selected .terminal-node__title').first(),
+      ).toContainText('terminal-mouse-window-switch-a')
+
+      await window.mouse.click(
+        secondNodeBox.x + secondNodeBox.width / 2,
+        secondNodeBox.y + secondNodeBox.height / 2,
+      )
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
+      await expect(
+        window.locator('.react-flow__node.selected .terminal-node__title').first(),
+      ).toContainText('terminal-mouse-window-switch-b')
+    } finally {
+      await electronApp.close()
+    }
+  })
 })
