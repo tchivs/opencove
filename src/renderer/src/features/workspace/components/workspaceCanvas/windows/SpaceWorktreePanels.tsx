@@ -322,7 +322,7 @@ export function SpaceWorktreePanels({
             )}
 
             <div className="cove-window__field-row">
-              <label htmlFor="space-worktree-name">Worktree directory</label>
+              <label htmlFor="space-worktree-name">Worktree name</label>
               <input
                 id="space-worktree-name"
                 data-testid="space-worktree-name"
