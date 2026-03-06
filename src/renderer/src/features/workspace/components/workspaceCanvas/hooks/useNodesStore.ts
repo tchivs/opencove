@@ -4,6 +4,7 @@ import type { Point, Size, TerminalNodeData, TaskPriority } from '../../../types
 import { useScrollbackStore } from '../../../store/useScrollbackStore'
 import { findNearestFreePosition } from '../../../utils/collision'
 import { scheduleNodeScrollbackWrite } from '../../../utils/persistence/scrollbackSchedule'
+import { resolveInitialAgentRuntimeStatus } from '../../../utils/agentRuntimeStatus'
 import {
   DEFAULT_NOTE_WINDOW_SIZE,
   MIN_SIZE,
@@ -384,7 +385,8 @@ export function useWorkspaceCanvasNodesStore({
           width: defaultSize.width,
           height: defaultSize.height,
           kind,
-          status: kind === 'agent' ? 'running' : null,
+          status:
+            kind === 'agent' ? resolveInitialAgentRuntimeStatus(agent?.prompt) : null,
           startedAt: kind === 'agent' ? now : null,
           endedAt: null,
           exitCode: null,

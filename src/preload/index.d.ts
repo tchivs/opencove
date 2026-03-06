@@ -27,6 +27,7 @@ import type {
   SuggestWorktreeNamesResult,
   TerminalDataEvent,
   TerminalExitEvent,
+  TerminalSessionMetadataEvent,
   TerminalSessionStateEvent,
   WorkspaceDirectory,
   WriteAppStateInput,
@@ -71,6 +72,7 @@ export interface CoveApi {
     onData: (listener: (event: TerminalDataEvent) => void) => UnsubscribeFn
     onExit: (listener: (event: TerminalExitEvent) => void) => UnsubscribeFn
     onState: (listener: (event: TerminalSessionStateEvent) => void) => UnsubscribeFn
+    onMetadata: (listener: (event: TerminalSessionMetadataEvent) => void) => UnsubscribeFn
   }
   agent: {
     listModels: (payload: ListAgentModelsInput) => Promise<ListAgentModelsResult>

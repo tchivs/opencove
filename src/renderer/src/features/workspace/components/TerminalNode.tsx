@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import { Terminal } from '@xterm/xterm'
@@ -44,6 +44,7 @@ export function TerminalNode({
   const lastSyncedPtySizeRef = useRef<{ cols: number; rows: number } | null>(null)
   const commandInputStateRef = useRef(createTerminalCommandInputState())
   const onCommandRunRef = useRef(onCommandRun)
+  const [isTerminalHydrated, setIsTerminalHydrated] = useState(false)
 
   useEffect(() => {
     onCommandRunRef.current = onCommandRun
@@ -64,6 +65,7 @@ export function TerminalNode({
   useEffect(() => {
     lastSyncedPtySizeRef.current = null
     commandInputStateRef.current = createTerminalCommandInputState()
+    setIsTerminalHydrated(false)
   }, [sessionId])
 
   const syncTerminalSize = useCallback(() => {
@@ -251,6 +253,17 @@ export function TerminalNode({
       isHydrating = false
       ptyWriteQueue.flush()
 
+      const revealTerminal = () => {
+        requestAnimationFrame(() => {
+          syncTerminalSize()
+          requestAnimationFrame(() => {
+            if (!isDisposed) {
+              setIsTerminalHydrated(true)
+            }
+          })
+        })
+      }
+
       const bufferedData = bufferedDataChunks.join('')
       bufferedDataChunks.length = 0
 
@@ -272,7 +285,7 @@ export function TerminalNode({
       }
 
       markScrollbackDirty(true)
-      syncTerminalSize()
+      revealTerminal()
     }
 
     const hydrateFromSnapshot = async () => {
@@ -407,7 +420,11 @@ export function TerminalNode({
 
       {isAgentNode && lastError ? <div className="terminal-node__error">{lastError}</div> : null}
 
-      <div ref={containerRef} className="terminal-node__terminal nodrag" />
+      <div
+        ref={containerRef}
+        className={`terminal-node__terminal nodrag ${isTerminalHydrated ? '' : 'terminal-node__terminal--hydrating'}`.trim()}
+        aria-busy={isTerminalHydrated ? 'false' : 'true'}
+      />
       <button
         type="button"
         className="terminal-node__resizer terminal-node__resizer--right nodrag"

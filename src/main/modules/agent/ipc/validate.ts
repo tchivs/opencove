@@ -87,10 +87,6 @@ export function normalizeLaunchAgentPayload(payload: unknown): LaunchAgentInput 
     throw new Error('agent:launch requires an absolute cwd')
   }
 
-  if (mode === 'new' && prompt.length === 0) {
-    throw new Error('Invalid prompt for agent:launch')
-  }
-
   return {
     provider,
     cwd,

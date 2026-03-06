@@ -8,7 +8,6 @@ import type {
 import type { IpcRegistrationDisposable } from '../../../ipc/types'
 import { buildAgentLaunchCommand } from '../../../infrastructure/agent/AgentCommandFactory'
 import { listAgentModels } from '../../../infrastructure/agent/AgentModelService'
-import { locateAgentResumeSessionId } from '../../../infrastructure/agent/AgentSessionLocator'
 import type { PtyRuntime } from '../../pty/ipc/runtime'
 import type { ApprovedWorkspaceStore } from '../../workspace/ApprovedWorkspaceStore'
 import {
@@ -59,25 +58,7 @@ export function registerAgentIpcHandlers(
       args: testStub?.args ?? launchCommand.args,
     })
 
-    let resumeSessionId = launchCommand.resumeSessionId
-
-    if (process.env.NODE_ENV !== 'test') {
-      const shouldDetectResumeSession =
-        launchCommand.launchMode === 'new' ||
-        (launchCommand.launchMode === 'resume' && resumeSessionId === null)
-
-      if (shouldDetectResumeSession) {
-        const detectedSessionId = await locateAgentResumeSessionId({
-          provider: normalized.provider,
-          cwd: normalized.cwd,
-          startedAtMs: launchStartedAtMs,
-        })
-
-        if (detectedSessionId) {
-          resumeSessionId = detectedSessionId
-        }
-      }
-    }
+    const resumeSessionId = launchCommand.resumeSessionId
 
     if (process.env.NODE_ENV !== 'test') {
       ptyRuntime.startSessionStateWatcher({

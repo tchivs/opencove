@@ -139,7 +139,7 @@ describe('TerminalNode hydration buffering', () => {
     const { TerminalNode } =
       await import('../../../src/renderer/src/features/workspace/components/TerminalNode')
 
-    render(
+    const { container } = render(
       <TerminalNode
         sessionId="session-1"
         title="t"
@@ -159,6 +159,9 @@ describe('TerminalNode hydration buffering', () => {
       expect(callOrder).toEqual(['onData', 'onExit', 'attach'])
     })
 
+    expect(container.querySelector('.terminal-node__terminal')).toHaveClass(
+      'terminal-node__terminal--hydrating',
+    )
     expect(window.coveApi.pty.snapshot).not.toHaveBeenCalled()
 
     attachDeferred.resolve()

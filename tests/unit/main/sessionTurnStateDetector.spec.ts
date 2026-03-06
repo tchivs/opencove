@@ -84,6 +84,30 @@ describe('detectTurnStateFromSessionLine', () => {
     expect(detectTurnStateFromSessionLine('codex', line)).toBe('working')
   })
 
+  it('treats codex user messages as standby', () => {
+    const line = JSON.stringify({
+      type: 'event_msg',
+      payload: {
+        type: 'user_message',
+        text: 'Review the current changes',
+      },
+    })
+
+    expect(detectTurnStateFromSessionLine('codex', line)).toBe('standby')
+  })
+
+  it('treats codex agent messages as standby', () => {
+    const line = JSON.stringify({
+      type: 'event_msg',
+      payload: {
+        type: 'agent_message',
+        text: 'Waiting for your next instruction',
+      },
+    })
+
+    expect(detectTurnStateFromSessionLine('codex', line)).toBe('standby')
+  })
+
   it('returns null for invalid JSON', () => {
     expect(detectTurnStateFromSessionLine('codex', '{invalid')).toBeNull()
   })

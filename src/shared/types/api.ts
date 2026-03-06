@@ -112,6 +112,11 @@ export interface TerminalSessionStateEvent {
   state: TerminalSessionState
 }
 
+export interface TerminalSessionMetadataEvent {
+  sessionId: string
+  resumeSessionId: string | null
+}
+
 export type AgentProviderId = 'claude-code' | 'codex'
 
 export type AgentLaunchMode = 'new' | 'resume'

@@ -27,13 +27,7 @@ function normalizeOptionalValue(value: string | null | undefined): string | null
 }
 
 function normalizePrompt(value: string | undefined): string {
-  const normalized = typeof value === 'string' ? value.trim() : ''
-
-  if (normalized.length === 0) {
-    throw new Error('Agent prompt cannot be empty')
-  }
-
-  return normalized
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function maybeTerminateOptionParsing(args: string[], value: string): void {
@@ -75,8 +69,10 @@ export function buildAgentLaunchCommand(input: BuildAgentLaunchCommandInput): Ag
     }
 
     const prompt = normalizePrompt(input.prompt)
-    maybeTerminateOptionParsing(args, prompt)
-    args.push(prompt)
+    if (prompt.length > 0) {
+      maybeTerminateOptionParsing(args, prompt)
+      args.push(prompt)
+    }
 
     return {
       command: 'claude',
@@ -119,8 +115,10 @@ export function buildAgentLaunchCommand(input: BuildAgentLaunchCommandInput): Ag
   }
 
   const prompt = normalizePrompt(input.prompt)
-  maybeTerminateOptionParsing(args, prompt)
-  args.push(prompt)
+  if (prompt.length > 0) {
+    maybeTerminateOptionParsing(args, prompt)
+    args.push(prompt)
+  }
 
   return {
     command: 'codex',

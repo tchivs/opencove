@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { clearAndSeedWorkspace, launchApp } from './workspace-canvas.helpers'
 
 test.describe('Workspace Canvas - Agent Launcher', () => {
-  test('runs agent from launcher v2 and creates node', async () => {
+  test('runs default agent directly and creates node', async () => {
     const { electronApp, window } = await launchApp({ windowMode: 'offscreen' })
 
     try {
@@ -37,16 +37,7 @@ test.describe('Workspace Canvas - Agent Launcher', () => {
       await runButton.click()
 
       const launcher = window.locator('[data-testid="workspace-agent-launcher"]')
-      await expect(launcher).toBeVisible()
-
-      await window.locator('[data-testid="workspace-agent-launch-provider"]').selectOption('codex')
-      await window.locator('[data-testid="workspace-agent-launch-model"]').fill('gpt-5.2-codex')
-
-      const promptInput = window.locator('[data-testid="workspace-agent-launch-prompt"]')
-      await promptInput.fill('Generate implementation plan for API error handling')
-
-      const submitButton = window.locator('[data-testid="workspace-agent-launch-submit"]')
-      await submitButton.click()
+      await expect(launcher).toHaveCount(0)
 
       await expect(window.locator('.terminal-node')).toHaveCount(1)
       await expect(window.locator('.terminal-node__title').first()).toContainText('gpt-5.2-codex')
@@ -55,6 +46,9 @@ test.describe('Workspace Canvas - Agent Launcher', () => {
         '[cove-test-agent] codex new',
       )
       await expect(window.locator('.workspace-sidebar .workspace-agent-item')).toHaveCount(1)
+      await expect(
+        window.locator('.workspace-sidebar .workspace-agent-item .workspace-agent-item__status--agent'),
+      ).toHaveText('Standby')
     } finally {
       await electronApp.close()
     }

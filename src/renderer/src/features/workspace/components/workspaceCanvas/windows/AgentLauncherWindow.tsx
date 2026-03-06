@@ -114,11 +114,11 @@ export function AgentLauncherWindow({
         </div>
 
         <div className="workspace-agent-launcher__field-row workspace-task-creator__field-row">
-          <label htmlFor="workspace-agent-prompt">Prompt</label>
+          <label htmlFor="workspace-agent-prompt">Prompt (optional)</label>
           <textarea
             id="workspace-agent-prompt"
             data-testid="workspace-agent-launch-prompt"
-            placeholder="输入任务提示词..."
+            placeholder="留空可直接启动交互式 agent..."
             value={agentLauncher.prompt}
             disabled={agentLauncher.isLaunching}
             onChange={event => {

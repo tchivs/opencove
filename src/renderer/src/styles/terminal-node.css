@@ -55,6 +55,12 @@
   flex: 1;
   min-height: 0;
   padding: 8px;
+  opacity: 1;
+  transition: opacity 0.12s ease;
+}
+
+.terminal-node__terminal--hydrating {
+  opacity: 0;
 }
 
 .terminal-node__terminal .xterm {

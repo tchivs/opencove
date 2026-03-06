@@ -80,6 +80,7 @@ describe('WorkspaceCanvas task agent session record', () => {
   it('persists a history record when a linked agent node is closed', async () => {
     const kill = vi.fn(async () => undefined)
     const onExit = vi.fn(() => () => undefined)
+    let metadataListener: ((event: { sessionId: string; resumeSessionId: string | null }) => void) | null = null
 
     Object.defineProperty(window, 'coveApi', {
       configurable: true,
@@ -88,6 +89,11 @@ describe('WorkspaceCanvas task agent session record', () => {
         pty: {
           kill,
           onExit,
+          onState: vi.fn(() => () => undefined),
+          onMetadata: vi.fn((listener: (event: { sessionId: string; resumeSessionId: string | null }) => void) => {
+            metadataListener = listener
+            return () => undefined
+          }),
         },
         agent: {
           launch: vi.fn(async () => {
@@ -132,7 +138,7 @@ describe('WorkspaceCanvas task agent session record', () => {
             model: 'gpt-5.2-codex',
             effectiveModel: 'gpt-5.2-codex',
             launchMode: 'new',
-            resumeSessionId: 'resume-1',
+            resumeSessionId: 'resume-updated',
             executionDirectory: '/tmp/repo/.cove/worktrees/demo',
             directoryMode: 'workspace',
             customDirectory: null,
@@ -211,6 +217,8 @@ describe('WorkspaceCanvas task agent session record', () => {
 
     render(<Harness />)
 
+    metadataListener?.({ sessionId: 'session-agent', resumeSessionId: 'resume-updated' })
+
     fireEvent.click(screen.getByTestId('agent-close'))
 
     await waitFor(() => {
@@ -226,7 +234,7 @@ describe('WorkspaceCanvas task agent session record', () => {
       expect.objectContaining({
         provider: 'codex',
         prompt: 'Do something important',
-        resumeSessionId: 'resume-1',
+        resumeSessionId: 'resume-updated',
         boundDirectory: '/tmp/repo/.cove/worktrees/demo',
         status: 'stopped',
       }),

@@ -128,15 +128,31 @@ describe('buildAgentLaunchCommand', () => {
     expect(command.launchMode).toBe('resume')
   })
 
-  it('rejects empty prompt when launching a new session', () => {
-    expect(() =>
-      buildAgentLaunchCommand({
-        provider: 'codex',
-        mode: 'new',
-        prompt: '   ',
-        model: null,
-        resumeSessionId: null,
-      }),
-    ).toThrow('Agent prompt cannot be empty')
+  it('supports starting codex without a prompt', () => {
+    const command = buildAgentLaunchCommand({
+      provider: 'codex',
+      mode: 'new',
+      prompt: '   ',
+      model: null,
+      resumeSessionId: null,
+    })
+
+    expect(command.command).toBe('codex')
+    expect(command.args).toEqual(['--dangerously-bypass-approvals-and-sandbox'])
+    expect(command.launchMode).toBe('new')
+  })
+
+  it('supports starting claude without a prompt', () => {
+    const command = buildAgentLaunchCommand({
+      provider: 'claude-code',
+      mode: 'new',
+      prompt: '   ',
+      model: null,
+      resumeSessionId: null,
+    })
+
+    expect(command.command).toBe('claude')
+    expect(command.args).toEqual(['--dangerously-skip-permissions'])
+    expect(command.launchMode).toBe('new')
   })
 })

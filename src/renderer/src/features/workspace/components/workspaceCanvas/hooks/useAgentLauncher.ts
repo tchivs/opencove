@@ -2,14 +2,23 @@ import { useCallback, useMemo, useState } from 'react'
 import type { Node } from '@xyflow/react'
 import { resolveAgentModel, type AgentSettings } from '../../../../settings/agentConfig'
 import type { AgentNodeData, Point, TerminalNodeData, WorkspaceSpaceState } from '../../../types'
-import {
-  normalizeDirectoryPath,
-  sanitizeSpaces,
-  toErrorMessage,
-  toSuggestedWorktreePath,
-} from '../helpers'
+import { normalizeDirectoryPath, sanitizeSpaces, toErrorMessage } from '../helpers'
 import type { AgentLauncherState, ContextMenuState, CreateNodeInput } from '../types'
 import { expandSpaceToFitOwnedNodesAndPushAway } from '../../../utils/spaceAutoResize'
+
+interface LaunchWorkspaceAgentInput {
+  anchor: Point
+  provider: AgentNodeData['provider']
+  prompt: string
+  model: string | null
+  directoryMode: 'workspace' | 'custom'
+  customDirectory: string | null
+  shouldCreateDirectory: boolean
+}
+
+type LaunchWorkspaceAgentResult =
+  | { ok: true }
+  | { ok: false; error: string; alreadyHandled?: boolean }
 
 interface UseAgentLauncherParams {
   agentSettings: AgentSettings
@@ -53,6 +62,180 @@ export function useWorkspaceCanvasAgentLauncher({
 } {
   const [agentLauncher, setAgentLauncher] = useState<AgentLauncherState | null>(null)
 
+  const launchWorkspaceAgent = useCallback(
+    async (input: LaunchWorkspaceAgentInput): Promise<LaunchWorkspaceAgentResult> => {
+      const normalizedPrompt = input.prompt.trim()
+      const normalizedModel = input.model?.trim() ?? ''
+
+      const anchorSpace =
+        spacesRef.current.find(space => {
+          if (!space.rect) {
+            return false
+          }
+
+          return (
+            input.anchor.x >= space.rect.x &&
+            input.anchor.x <= space.rect.x + space.rect.width &&
+            input.anchor.y >= space.rect.y &&
+            input.anchor.y <= space.rect.y + space.rect.height
+          )
+        }) ?? null
+
+      const anchorSpaceDirectory =
+        anchorSpace && anchorSpace.directoryPath.trim().length > 0
+          ? anchorSpace.directoryPath
+          : workspacePath
+
+      const executionDirectory =
+        input.directoryMode === 'workspace'
+          ? anchorSpaceDirectory
+          : normalizeDirectoryPath(workspacePath, input.customDirectory ?? '')
+
+      if (executionDirectory.trim().length === 0) {
+        return {
+          ok: false,
+          error: '请填写有效的执行目录。',
+        }
+      }
+
+      try {
+        if (input.directoryMode === 'custom' && input.shouldCreateDirectory) {
+          await window.coveApi.workspace.ensureDirectory({ path: executionDirectory })
+        }
+
+        const launched = await window.coveApi.agent.launch({
+          provider: input.provider,
+          cwd: executionDirectory,
+          prompt: normalizedPrompt,
+          mode: 'new',
+          model: normalizedModel.length > 0 ? normalizedModel : null,
+          agentFullAccess: agentSettings.agentFullAccess,
+          cols: 80,
+          rows: 24,
+        })
+
+        const modelLabel =
+          launched.effectiveModel ?? (normalizedModel.length > 0 ? normalizedModel : null)
+        const agentData: AgentNodeData = {
+          provider: input.provider,
+          prompt: normalizedPrompt,
+          model: normalizedModel.length > 0 ? normalizedModel : null,
+          effectiveModel: launched.effectiveModel,
+          launchMode: launched.launchMode,
+          resumeSessionId: launched.resumeSessionId,
+          executionDirectory,
+          expectedDirectory: anchorSpace ? anchorSpaceDirectory : executionDirectory,
+          directoryMode: input.directoryMode,
+          customDirectory:
+            input.directoryMode === 'custom' ? (input.customDirectory?.trim() || null) : null,
+          shouldCreateDirectory: input.shouldCreateDirectory,
+          taskId: null,
+        }
+
+        const created = await createNodeForSession({
+          sessionId: launched.sessionId,
+          title: buildAgentNodeTitle(input.provider, modelLabel),
+          anchor: input.anchor,
+          kind: 'agent',
+          agent: agentData,
+        })
+
+        if (!created) {
+          return {
+            ok: false,
+            error: '终端窗口无法放置，请先整理画布后重试。',
+            alreadyHandled: true,
+          }
+        }
+
+        if (anchorSpace) {
+          const targetSpace = anchorSpace
+          const nextSpaces = sanitizeSpaces(
+            spacesRef.current.map(space => {
+              const filtered = space.nodeIds.filter(nodeId => nodeId !== created.id)
+
+              if (space.id !== targetSpace.id) {
+                return {
+                  ...space,
+                  nodeIds: filtered,
+                }
+              }
+
+              return {
+                ...space,
+                nodeIds: [...new Set([...filtered, created.id])],
+              }
+            }),
+          )
+
+          const { spaces: pushedSpaces, nodePositionById } =
+            expandSpaceToFitOwnedNodesAndPushAway({
+              targetSpaceId: targetSpace.id,
+              spaces: nextSpaces,
+              nodeRects: nodesRef.current.map(node => ({
+                id: node.id,
+                rect: {
+                  x: node.position.x,
+                  y: node.position.y,
+                  width: node.data.width,
+                  height: node.data.height,
+                },
+              })),
+              gap: 24,
+            })
+
+          if (nodePositionById.size > 0) {
+            setNodes(
+              prevNodes => {
+                let hasChanged = false
+                const next = prevNodes.map(node => {
+                  const nextPosition = nodePositionById.get(node.id)
+                  if (!nextPosition) {
+                    return node
+                  }
+
+                  if (node.position.x === nextPosition.x && node.position.y === nextPosition.y) {
+                    return node
+                  }
+
+                  hasChanged = true
+                  return {
+                    ...node,
+                    position: nextPosition,
+                  }
+                })
+
+                return hasChanged ? next : prevNodes
+              },
+              { syncLayout: false },
+            )
+          }
+
+          onSpacesChange(pushedSpaces)
+          onRequestPersistFlush?.()
+        }
+
+        return { ok: true }
+      } catch (error) {
+        return {
+          ok: false,
+          error: `Agent 启动失败：${toErrorMessage(error)}`,
+        }
+      }
+    },
+    [
+      agentSettings.agentFullAccess,
+      buildAgentNodeTitle,
+      createNodeForSession,
+      nodesRef,
+      onSpacesChange,
+      onRequestPersistFlush,
+      setNodes,
+      spacesRef,
+      workspacePath,
+    ],
+  )
+
   const openAgentLauncher = useCallback(() => {
     if (!contextMenu || contextMenu.kind !== 'pane') {
       return
@@ -63,22 +246,25 @@ export function useWorkspaceCanvasAgentLauncher({
       y: contextMenu.flowY,
     }
 
-    const initialProvider = agentSettings.defaultProvider
-    const defaultModel = resolveAgentModel(agentSettings, initialProvider) ?? ''
+    const provider = agentSettings.defaultProvider
+    const model = resolveAgentModel(agentSettings, provider)
 
     setContextMenu(null)
-    setAgentLauncher({
+
+    void launchWorkspaceAgent({
       anchor,
-      provider: initialProvider,
+      provider,
       prompt: '',
-      model: defaultModel,
+      model,
       directoryMode: 'workspace',
-      customDirectory: toSuggestedWorktreePath(workspacePath, initialProvider),
-      shouldCreateDirectory: true,
-      isLaunching: false,
-      error: null,
+      customDirectory: null,
+      shouldCreateDirectory: false,
+    }).then(result => {
+      if (!result.ok && !result.alreadyHandled) {
+        window.alert(result.error)
+      }
     })
-  }, [agentSettings, contextMenu, setContextMenu, workspacePath])
+  }, [agentSettings, contextMenu, launchWorkspaceAgent, setContextMenu])
 
   const closeAgentLauncher = useCallback(() => {
     setAgentLauncher(prev => {
@@ -95,57 +281,6 @@ export function useWorkspaceCanvasAgentLauncher({
       return
     }
 
-    const normalizedPrompt = agentLauncher.prompt.trim()
-    if (normalizedPrompt.length === 0) {
-      setAgentLauncher(prev =>
-        prev
-          ? {
-              ...prev,
-              error: '任务提示词不能为空。',
-            }
-          : prev,
-      )
-      return
-    }
-
-    const normalizedModel = agentLauncher.model.trim()
-
-    const anchorSpace =
-      spacesRef.current.find(space => {
-        if (!space.rect) {
-          return false
-        }
-
-        return (
-          agentLauncher.anchor.x >= space.rect.x &&
-          agentLauncher.anchor.x <= space.rect.x + space.rect.width &&
-          agentLauncher.anchor.y >= space.rect.y &&
-          agentLauncher.anchor.y <= space.rect.y + space.rect.height
-        )
-      }) ?? null
-
-    const anchorSpaceDirectory =
-      anchorSpace && anchorSpace.directoryPath.trim().length > 0
-        ? anchorSpace.directoryPath
-        : workspacePath
-
-    const executionDirectory =
-      agentLauncher.directoryMode === 'workspace'
-        ? anchorSpaceDirectory
-        : normalizeDirectoryPath(workspacePath, agentLauncher.customDirectory)
-
-    if (executionDirectory.trim().length === 0) {
-      setAgentLauncher(prev =>
-        prev
-          ? {
-              ...prev,
-              error: '请填写有效的执行目录。',
-            }
-          : prev,
-      )
-      return
-    }
-
     setAgentLauncher(prev =>
       prev
         ? {
@@ -156,150 +291,31 @@ export function useWorkspaceCanvasAgentLauncher({
         : prev,
     )
 
-    try {
-      if (agentLauncher.directoryMode === 'custom' && agentLauncher.shouldCreateDirectory) {
-        await window.coveApi.workspace.ensureDirectory({ path: executionDirectory })
-      }
+    const result = await launchWorkspaceAgent({
+      anchor: agentLauncher.anchor,
+      provider: agentLauncher.provider,
+      prompt: agentLauncher.prompt,
+      model: agentLauncher.model,
+      directoryMode: agentLauncher.directoryMode,
+      customDirectory: agentLauncher.customDirectory,
+      shouldCreateDirectory: agentLauncher.shouldCreateDirectory,
+    })
 
-      const launched = await window.coveApi.agent.launch({
-        provider: agentLauncher.provider,
-        cwd: executionDirectory,
-        prompt: normalizedPrompt,
-        mode: 'new',
-        model: normalizedModel.length > 0 ? normalizedModel : null,
-        agentFullAccess: agentSettings.agentFullAccess,
-        cols: 80,
-        rows: 24,
-      })
-
-      const modelLabel =
-        launched.effectiveModel ?? (normalizedModel.length > 0 ? normalizedModel : null)
-      const agentData: AgentNodeData = {
-        provider: agentLauncher.provider,
-        prompt: normalizedPrompt,
-        model: normalizedModel.length > 0 ? normalizedModel : null,
-        effectiveModel: launched.effectiveModel,
-        launchMode: launched.launchMode,
-        resumeSessionId: launched.resumeSessionId,
-        executionDirectory,
-        expectedDirectory: anchorSpace ? anchorSpaceDirectory : executionDirectory,
-        directoryMode: agentLauncher.directoryMode,
-        customDirectory:
-          agentLauncher.directoryMode === 'custom' ? agentLauncher.customDirectory.trim() : null,
-        shouldCreateDirectory: agentLauncher.shouldCreateDirectory,
-        taskId: null,
-      }
-
-      const created = await createNodeForSession({
-        sessionId: launched.sessionId,
-        title: buildAgentNodeTitle(agentLauncher.provider, modelLabel),
-        anchor: agentLauncher.anchor,
-        kind: 'agent',
-        agent: agentData,
-      })
-
-      if (!created) {
-        setAgentLauncher(prev =>
-          prev
-            ? {
-                ...prev,
-                isLaunching: false,
-                error: '终端窗口无法放置，请先整理画布后重试。',
-              }
-            : prev,
-        )
-        return
-      }
-
-      if (anchorSpace) {
-        const targetSpace = anchorSpace
-        const nextSpaces = sanitizeSpaces(
-          spacesRef.current.map(space => {
-            const filtered = space.nodeIds.filter(nodeId => nodeId !== created.id)
-
-            if (space.id !== targetSpace.id) {
-              return {
-                ...space,
-                nodeIds: filtered,
-              }
-            }
-
-            return {
-              ...space,
-              nodeIds: [...new Set([...filtered, created.id])],
-            }
-          }),
-        )
-
-        const { spaces: pushedSpaces, nodePositionById } = expandSpaceToFitOwnedNodesAndPushAway({
-          targetSpaceId: targetSpace.id,
-          spaces: nextSpaces,
-          nodeRects: nodesRef.current.map(node => ({
-            id: node.id,
-            rect: {
-              x: node.position.x,
-              y: node.position.y,
-              width: node.data.width,
-              height: node.data.height,
-            },
-          })),
-          gap: 24,
-        })
-
-        if (nodePositionById.size > 0) {
-          setNodes(
-            prevNodes => {
-              let hasChanged = false
-              const next = prevNodes.map(node => {
-                const nextPosition = nodePositionById.get(node.id)
-                if (!nextPosition) {
-                  return node
-                }
-
-                if (node.position.x === nextPosition.x && node.position.y === nextPosition.y) {
-                  return node
-                }
-
-                hasChanged = true
-                return {
-                  ...node,
-                  position: nextPosition,
-                }
-              })
-
-              return hasChanged ? next : prevNodes
-            },
-            { syncLayout: false },
-          )
-        }
-
-        onSpacesChange(pushedSpaces)
-        onRequestPersistFlush?.()
-      }
-
+    if (result.ok) {
       setAgentLauncher(null)
-    } catch (error) {
-      setAgentLauncher(prev =>
-        prev
-          ? {
-              ...prev,
-              isLaunching: false,
-              error: `Agent 启动失败：${toErrorMessage(error)}`,
-            }
-          : prev,
-      )
+      return
     }
-  }, [
-    agentLauncher,
-    buildAgentNodeTitle,
-    createNodeForSession,
-    nodesRef,
-    onSpacesChange,
-    onRequestPersistFlush,
-    setNodes,
-    spacesRef,
-    workspacePath,
-  ])
+
+    setAgentLauncher(prev =>
+      prev
+        ? {
+            ...prev,
+            isLaunching: false,
+            error: result.error,
+          }
+        : prev,
+    )
+  }, [agentLauncher, launchWorkspaceAgent])
 
   const launcherModelOptions = useMemo(() => {
     if (!agentLauncher) {

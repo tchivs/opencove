@@ -22,6 +22,7 @@ export const IPC_CHANNELS = {
   ptyData: 'pty:data',
   ptyExit: 'pty:exit',
   ptyState: 'pty:state',
+  ptySessionMetadata: 'pty:session-metadata',
   agentListModels: 'agent:list-models',
   agentLaunch: 'agent:launch',
   taskSuggestTitle: 'task:suggest-title',

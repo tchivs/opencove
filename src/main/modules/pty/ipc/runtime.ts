@@ -5,6 +5,7 @@ import type {
   AgentProviderId,
   TerminalDataEvent,
   TerminalExitEvent,
+  TerminalSessionMetadataEvent,
   TerminalSessionStateEvent,
 } from '../../../../shared/types/api'
 import { locateAgentResumeSessionId } from '../../../infrastructure/agent/AgentSessionLocator'
@@ -220,6 +221,14 @@ export function createPtyRuntime(): PtyRuntime {
     return next
   }
 
+  const broadcastSessionMetadata = (sessionId: string, resumeSessionId: string | null): void => {
+    const eventPayload: TerminalSessionMetadataEvent = {
+      sessionId,
+      resumeSessionId,
+    }
+    sendToAllWindows(IPC_CHANNELS.ptySessionMetadata, eventPayload)
+  }
+
   const clearSessionStateWatcher = (sessionId: string): void => {
     bumpStateWatcherVersion(sessionId)
 
@@ -257,6 +266,12 @@ export function createPtyRuntime(): PtyRuntime {
         )
         return
       }
+
+      if ((stateWatcherVersionBySession.get(sessionId) ?? 0) !== watcherVersion) {
+        return
+      }
+
+      broadcastSessionMetadata(sessionId, resolvedSessionId)
 
       const sessionFilePath = await resolveSessionFilePath({
         provider,

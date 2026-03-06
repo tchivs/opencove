@@ -11,6 +11,7 @@ import { readPersistedStateWithMeta } from '../../features/workspace/utils/persi
 import { getPersistencePort } from '../../features/workspace/utils/persistence/port'
 import { toRuntimeNodes } from '../../features/workspace/utils/nodeTransform'
 import { toAgentNodeTitle, toErrorMessage } from '../utils/format'
+import { resolveInitialAgentRuntimeStatus } from '../../features/workspace/utils/agentRuntimeStatus'
 import { useAppStore } from '../store/useAppStore'
 import { sanitizeWorkspaceSpaces } from '../utils/workspaceSpaces'
 
@@ -116,7 +117,7 @@ export function useHydrateAppState({
                     ...node.data,
                     sessionId: restoredAgent.sessionId,
                     title: toAgentNodeTitle(node.data.agent.provider, restoredAgent.effectiveModel),
-                    status: 'running' as const,
+                    status: resolveInitialAgentRuntimeStatus(node.data.agent.prompt),
                     endedAt: null,
                     exitCode: null,
                     lastError: null,

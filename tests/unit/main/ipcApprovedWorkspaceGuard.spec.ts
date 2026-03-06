@@ -189,6 +189,58 @@ describe('IPC approved workspace guards', () => {
     }
   })
 
+  it('starts agent state watcher in the background without blocking launch', async () => {
+    vi.resetModules()
+
+    const previousNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+
+    try {
+      const { handlers, ipcMain } = createIpcHarness()
+      vi.doMock('electron', () => ({ ipcMain }))
+
+      const runtime = createPtyRuntimeMock()
+      const store = createApprovedWorkspaceStoreMock({ isPathApproved: true })
+
+      const { registerAgentIpcHandlers } =
+        await import('../../../src/main/modules/agent/ipc/register')
+      registerAgentIpcHandlers(runtime, store)
+
+      const launchHandler = handlers.get(IPC_CHANNELS.agentLaunch)
+      expect(launchHandler).toBeTypeOf('function')
+
+      const result = await launchHandler?.(null, {
+        provider: 'codex',
+        cwd: '/tmp/approved',
+        prompt: '',
+        cols: 80,
+        rows: 24,
+      })
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          provider: 'codex',
+          resumeSessionId: null,
+        }),
+      )
+      expect(runtime.startSessionStateWatcher).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          provider: 'codex',
+          cwd: '/tmp/approved',
+          resumeSessionId: null,
+        }),
+      )
+    } finally {
+      if (typeof previousNodeEnv === 'string') {
+        process.env.NODE_ENV = previousNodeEnv
+      } else {
+        delete process.env.NODE_ENV
+      }
+    }
+  })
+
   it('blocks task:suggest-title outside approved roots', async () => {
     vi.resetModules()
 

@@ -1,0 +1,208 @@
+import React, { useState } from 'react'
+import type { Node } from '@xyflow/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { DEFAULT_AGENT_SETTINGS } from '../../../src/renderer/src/features/settings/agentConfig'
+import type {
+  TerminalNodeData,
+  WorkspaceSpaceState,
+  WorkspaceViewport,
+} from '../../../src/renderer/src/features/workspace/types'
+import { WorkspaceCanvas } from '../../../src/renderer/src/features/workspace/components/WorkspaceCanvas'
+
+vi.mock('@xyflow/react', () => {
+  return {
+    ReactFlowProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    useReactFlow: () => ({
+      screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
+      setCenter: vi.fn(),
+      getViewport: vi.fn(() => ({ x: 0, y: 0, zoom: 1 })),
+      setViewport: vi.fn(),
+    }),
+    ViewportPortal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    applyNodeChanges: (_changes: unknown, nodes: unknown) => nodes,
+    ReactFlow: ({
+      nodes,
+      nodeTypes,
+      onPaneContextMenu,
+    }: {
+      nodes: Array<{ id: string; type: string; data: unknown }>
+      nodeTypes?: Record<string, React.ComponentType<{ id: string; data: unknown }>>
+      onPaneContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void
+    }) => {
+      return (
+        <div>
+          <div
+            data-testid="react-flow-pane"
+            className="react-flow__pane"
+            onContextMenu={event => {
+              onPaneContextMenu?.(event)
+            }}
+          />
+          {nodes.map(node => {
+            const Renderer = nodeTypes?.[node.type]
+            if (!Renderer) {
+              return null
+            }
+            return <Renderer key={node.id} id={node.id} data={node.data} />
+          })}
+        </div>
+      )
+    },
+    Background: () => null,
+    Controls: () => null,
+    MiniMap: () => null,
+    BackgroundVariant: {
+      Dots: 'dots',
+    },
+    SelectionMode: {
+      Partial: 'partial',
+    },
+    MarkerType: {
+      ArrowClosed: 'arrowclosed',
+    },
+    PanOnScrollMode: {
+      Free: 'free',
+    },
+    Handle: () => null,
+    Position: {
+      Left: 'left',
+      Right: 'right',
+    },
+  }
+})
+
+vi.mock('../../../src/renderer/src/features/workspace/components/TerminalNode', () => {
+  return {
+    TerminalNode: ({ status, title }: { status?: string | null; title?: string }) => {
+      return (
+        <div data-testid="agent-node-status">
+          {title}:{status ?? 'null'}
+        </div>
+      )
+    },
+  }
+})
+
+vi.mock('../../../src/renderer/src/features/workspace/components/TaskNode', () => {
+  return {
+    TaskNode: () => null,
+  }
+})
+
+describe('WorkspaceCanvas run default agent', () => {
+  it('launches the default agent directly from the pane context menu with standby initial status', async () => {
+    const launch = vi.fn(async () => ({
+      sessionId: 'new-session',
+      provider: 'codex' as const,
+      command: 'codex',
+      args: ['--dangerously-bypass-approvals-and-sandbox'],
+      launchMode: 'new' as const,
+      effectiveModel: 'gpt-5.2-codex',
+      resumeSessionId: null,
+    }))
+
+    Object.defineProperty(window, 'alert', {
+      configurable: true,
+      writable: true,
+      value: vi.fn(),
+    })
+
+    Object.defineProperty(window, 'coveApi', {
+      configurable: true,
+      writable: true,
+      value: {
+        pty: {
+          kill: vi.fn(async () => undefined),
+          onExit: vi.fn(() => () => undefined),
+          onState: vi.fn(() => () => undefined),
+          onMetadata: vi.fn(() => () => undefined),
+        },
+        workspace: {
+          ensureDirectory: vi.fn(async () => undefined),
+        },
+        agent: {
+          launch,
+        },
+        task: {
+          suggestTitle: vi.fn(async () => ({
+            title: 't',
+            provider: 'codex',
+            effectiveModel: null,
+          })),
+        },
+      },
+    })
+
+    const viewport: WorkspaceViewport = { x: 0, y: 0, zoom: 1 }
+    const spaces: WorkspaceSpaceState[] = []
+
+    function Harness() {
+      const [nodes, setNodes] = useState<Node<TerminalNodeData>[]>([])
+
+      return (
+        <WorkspaceCanvas
+          workspaceId="workspace-1"
+          workspacePath="/tmp/repo"
+          worktreesRoot=""
+          nodes={nodes}
+          onNodesChange={setNodes}
+          spaces={spaces}
+          activeSpaceId={null}
+          onSpacesChange={() => undefined}
+          onActiveSpaceChange={() => undefined}
+          viewport={viewport}
+          isMinimapVisible={false}
+          onViewportChange={() => undefined}
+          onMinimapVisibilityChange={() => undefined}
+          agentSettings={{
+            ...DEFAULT_AGENT_SETTINGS,
+            defaultProvider: 'codex',
+            customModelEnabledByProvider: {
+              ...DEFAULT_AGENT_SETTINGS.customModelEnabledByProvider,
+              codex: true,
+            },
+            customModelByProvider: {
+              ...DEFAULT_AGENT_SETTINGS.customModelByProvider,
+              codex: 'gpt-5.2-codex',
+            },
+            customModelOptionsByProvider: {
+              ...DEFAULT_AGENT_SETTINGS.customModelOptionsByProvider,
+              codex: ['gpt-5.2-codex'],
+            },
+          }}
+        />
+      )
+    }
+
+    render(<Harness />)
+
+    fireEvent.contextMenu(screen.getByTestId('react-flow-pane'), {
+      clientX: 320,
+      clientY: 220,
+    })
+
+    fireEvent.click(await screen.findByTestId('workspace-context-run-default-agent'))
+
+    await waitFor(() => {
+      expect(launch).toHaveBeenCalledTimes(1)
+    })
+
+    expect(launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'codex',
+        cwd: '/tmp/repo',
+        prompt: '',
+        mode: 'new',
+        model: 'gpt-5.2-codex',
+      }),
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-node-status')).toHaveTextContent(
+        'codex · gpt-5.2-codex:standby',
+      )
+    })
+    expect(screen.queryByTestId('workspace-agent-launcher')).toBeNull()
+    expect(window.alert).not.toHaveBeenCalled()
+  })
+})

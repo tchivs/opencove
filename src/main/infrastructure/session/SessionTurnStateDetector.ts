@@ -83,15 +83,15 @@ function detectCodexTurnState(parsed: unknown): TerminalSessionState | null {
       return null
     }
 
-    if (
-      payload.type === 'agent_reasoning' ||
-      payload.type === 'agent_message' ||
-      payload.type === 'user_message'
-    ) {
+    if (payload.type === 'agent_reasoning') {
       return 'working'
     }
 
-    if (payload.type === 'turn_aborted') {
+    if (
+      payload.type === 'agent_message' ||
+      payload.type === 'user_message' ||
+      payload.type === 'turn_aborted'
+    ) {
       return 'standby'
     }
   }

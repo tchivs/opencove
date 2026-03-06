@@ -327,7 +327,10 @@ function WorkspaceCanvasInner({
     reactFlow,
   })
 
-  useWorkspaceCanvasPtyTaskCompletion({ setNodes })
+  useWorkspaceCanvasPtyTaskCompletion({
+    setNodes,
+    onRequestPersistFlush,
+  })
 
   const selectNode = useWorkspaceCanvasSelectNode({ setNodes, setSelectedNodeIds })
 

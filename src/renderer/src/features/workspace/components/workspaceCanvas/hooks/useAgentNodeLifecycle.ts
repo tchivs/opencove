@@ -2,6 +2,7 @@ import { useCallback, type MutableRefObject } from 'react'
 import type { Node } from '@xyflow/react'
 import type { AgentNodeData, TerminalNodeData } from '../../../types'
 import { providerTitlePrefix, toErrorMessage } from '../helpers'
+import { resolveInitialAgentRuntimeStatus } from '../../../utils/agentRuntimeStatus'
 
 interface UseAgentNodeLifecycleParams {
   nodesRef: MutableRefObject<Node<TerminalNodeData>[]>
@@ -147,7 +148,7 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
                 ...item.data,
                 sessionId: launched.sessionId,
                 title: buildAgentNodeTitle(launchData.provider, launched.effectiveModel),
-                status: 'running',
+                status: resolveInitialAgentRuntimeStatus(launchData.prompt),
                 startedAt:
                   mode === 'new' ? new Date().toISOString() : (item.data.startedAt ?? null),
                 endedAt: null,
@@ -185,7 +186,14 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
         )
       }
     },
-    [buildAgentNodeTitle, bumpAgentLaunchToken, isAgentLaunchTokenCurrent, nodesRef, setNodes],
+    [
+      agentFullAccess,
+      buildAgentNodeTitle,
+      bumpAgentLaunchToken,
+      isAgentLaunchTokenCurrent,
+      nodesRef,
+      setNodes,
+    ],
   )
 
   const stopAgentNode = useCallback(
