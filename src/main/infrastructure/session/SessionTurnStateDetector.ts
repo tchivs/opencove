@@ -4,6 +4,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object'
 }
 
+function isWhitespaceCode(code: number): boolean {
+  return code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0d
+}
+
+function normalizeSessionLineCandidate(line: string): string | null {
+  let start = 0
+  let end = line.length
+
+  while (start < end && isWhitespaceCode(line.charCodeAt(start))) {
+    start += 1
+  }
+
+  while (end > start && isWhitespaceCode(line.charCodeAt(end - 1))) {
+    end -= 1
+  }
+
+  if (start === end || line.charCodeAt(start) !== 0x7b) {
+    return null
+  }
+
+  return start === 0 && end === line.length ? line : line.slice(start, end)
+}
+
+function mayContainTurnState(provider: AgentProviderId, line: string): boolean {
+  if (!line.includes('"type"')) {
+    return false
+  }
+
+  if (provider === 'claude-code') {
+    return line.includes('"assistant"') || line.includes('"user"')
+  }
+
+  return line.includes('"response_item"') || line.includes('"event_msg"')
+}
+
 function hasContentBlockType(message: Record<string, unknown>, blockType: string): boolean {
   if (!Array.isArray(message.content)) {
     return false
@@ -33,8 +68,6 @@ function detectClaudeTurnState(parsed: unknown): TerminalSessionState | null {
       return 'standby'
     }
 
-    // Claude writes many streaming assistant chunks with stop_reason=null.
-    // A non-null stop_reason means this assistant turn has stopped and is waiting.
     if (message.stop_reason === null) {
       return 'working'
     }
@@ -114,13 +147,13 @@ export function detectTurnStateFromSessionLine(
   provider: AgentProviderId,
   line: string,
 ): TerminalSessionState | null {
-  const trimmed = line.trim()
-  if (trimmed.length === 0) {
+  const candidate = normalizeSessionLineCandidate(line)
+  if (!candidate || !mayContainTurnState(provider, candidate)) {
     return null
   }
 
   try {
-    const parsed = JSON.parse(trimmed)
+    const parsed = JSON.parse(candidate)
     return detectTurnStateFromSessionRecord(provider, parsed)
   } catch {
     return null

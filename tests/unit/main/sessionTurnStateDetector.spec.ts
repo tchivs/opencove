@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { detectTurnStateFromSessionLine } from '../../../src/main/infrastructure/session/SessionTurnStateDetector'
 
 describe('detectTurnStateFromSessionLine', () => {
@@ -108,16 +108,56 @@ describe('detectTurnStateFromSessionLine', () => {
     expect(detectTurnStateFromSessionLine('codex', line)).toBe('standby')
   })
 
+  it('accepts leading and trailing whitespace around valid JSON', () => {
+    const line = `\n  ${JSON.stringify({
+      type: 'event_msg',
+      payload: {
+        type: 'agent_reasoning',
+      },
+    })}\t  `
+
+    expect(detectTurnStateFromSessionLine('codex', line)).toBe('working')
+  })
+
   it('returns null for invalid JSON', () => {
     expect(detectTurnStateFromSessionLine('codex', '{invalid')).toBeNull()
   })
 
-  it('ignores claude queue-operation events so standby is not overwritten', () => {
-    const line = JSON.stringify({
-      type: 'queue-operation',
-      operation: 'dequeue',
-    })
+  it('skips parsing irrelevant codex lines', () => {
+    const parseSpy = vi.spyOn(JSON, 'parse')
 
-    expect(detectTurnStateFromSessionLine('claude-code', line)).toBeNull()
+    try {
+      expect(detectTurnStateFromSessionLine('codex', 'PROFILE_LINE')).toBeNull()
+      expect(
+        detectTurnStateFromSessionLine(
+          'codex',
+          JSON.stringify({
+            type: 'heartbeat',
+            payload: {
+              type: 'noop',
+            },
+          }),
+        ),
+      ).toBeNull()
+      expect(parseSpy).not.toHaveBeenCalled()
+    } finally {
+      parseSpy.mockRestore()
+    }
+  })
+
+  it('ignores claude queue-operation events so standby is not overwritten', () => {
+    const parseSpy = vi.spyOn(JSON, 'parse')
+
+    try {
+      const line = JSON.stringify({
+        type: 'queue-operation',
+        operation: 'dequeue',
+      })
+
+      expect(detectTurnStateFromSessionLine('claude-code', line)).toBeNull()
+      expect(parseSpy).not.toHaveBeenCalled()
+    } finally {
+      parseSpy.mockRestore()
+    }
   })
 })

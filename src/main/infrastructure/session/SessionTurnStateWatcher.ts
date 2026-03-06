@@ -149,24 +149,36 @@ export class SessionTurnStateWatcher {
           continue
         }
 
-        const merged = `${this.remainder}${textChunk}`
-        const lines = merged.split('\n')
-        this.remainder = lines.pop() ?? ''
-
-        for (const line of lines) {
-          const state = detectTurnStateFromSessionLine(this.provider, line)
-          if (!state || state === this.lastState) {
-            continue
-          }
-
-          this.lastState = state
-          this.onState(this.sessionId, state)
-        }
+        this.consumeTextChunk(textChunk)
       }
 
       this.offset = position
     } finally {
       await handle.close()
     }
+  }
+
+  private consumeTextChunk(textChunk: string): void {
+    const merged = this.remainder.length > 0 ? `${this.remainder}${textChunk}` : textChunk
+    let lineStart = 0
+    let nextLineBreak = merged.indexOf('\n', lineStart)
+
+    while (nextLineBreak !== -1) {
+      this.consumeLine(merged.slice(lineStart, nextLineBreak))
+      lineStart = nextLineBreak + 1
+      nextLineBreak = merged.indexOf('\n', lineStart)
+    }
+
+    this.remainder = lineStart === 0 ? merged : merged.slice(lineStart)
+  }
+
+  private consumeLine(line: string): void {
+    const state = detectTurnStateFromSessionLine(this.provider, line)
+    if (!state || state === this.lastState) {
+      return
+    }
+
+    this.lastState = state
+    this.onState(this.sessionId, state)
   }
 }

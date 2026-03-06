@@ -13,8 +13,10 @@ import { PtyManager, type SpawnPtyOptions } from '../../../infrastructure/pty/Pt
 import { resolveSessionFilePath } from '../../../infrastructure/session/SessionFileResolver'
 import { SessionTurnStateWatcher } from '../../../infrastructure/session/SessionTurnStateWatcher'
 
-const PTY_DATA_FLUSH_DELAY_MS = 16
-const PTY_DATA_MAX_BATCH_CHARS = 64_000
+const PTY_DATA_FLUSH_DELAY_MS = 32
+const PTY_DATA_HIGH_VOLUME_FLUSH_DELAY_MS = 64
+const PTY_DATA_HIGH_VOLUME_BATCH_CHARS = 32_000
+const PTY_DATA_MAX_BATCH_CHARS = 256_000
 
 export interface StartSessionStateWatcherInput {
   sessionId: string
@@ -53,6 +55,7 @@ export function createPtyRuntime(): PtyRuntime {
   const pendingPtyDataChunksBySession = new Map<string, string[]>()
   const pendingPtyDataCharsBySession = new Map<string, number>()
   const pendingPtyDataFlushTimerBySession = new Map<string, NodeJS.Timeout>()
+  const pendingPtyDataFlushDelayBySession = new Map<string, number>()
   const ptyDataSubscribersBySessionId = new Map<string, Set<number>>()
   const ptyDataSessionsByWebContentsId = new Map<number, Set<string>>()
   const ptyDataSubscribedWebContentsIds = new Set<number>()
@@ -126,6 +129,11 @@ export function createPtyRuntime(): PtyRuntime {
     })
   }
 
+  const hasPtyDataSubscribers = (sessionId: string): boolean => {
+    const subscribers = ptyDataSubscribersBySessionId.get(sessionId)
+    return Boolean(subscribers && subscribers.size > 0)
+  }
+
   const sendPtyDataToSubscribers = (eventPayload: TerminalDataEvent): void => {
     const subscribers = ptyDataSubscribersBySessionId.get(eventPayload.sessionId)
     if (!subscribers || subscribers.size === 0) {
@@ -146,12 +154,20 @@ export function createPtyRuntime(): PtyRuntime {
     }
   }
 
+  const resolvePtyDataFlushDelay = (pendingChars: number): number => {
+    return pendingChars >= PTY_DATA_HIGH_VOLUME_BATCH_CHARS
+      ? PTY_DATA_HIGH_VOLUME_FLUSH_DELAY_MS
+      : PTY_DATA_FLUSH_DELAY_MS
+  }
+
   const flushPtyDataBroadcast = (sessionId: string): void => {
     const timer = pendingPtyDataFlushTimerBySession.get(sessionId)
     if (timer) {
       clearTimeout(timer)
       pendingPtyDataFlushTimerBySession.delete(sessionId)
     }
+
+    pendingPtyDataFlushDelayBySession.delete(sessionId)
 
     const chunks = pendingPtyDataChunksBySession.get(sessionId)
     if (!chunks || chunks.length === 0) {
@@ -163,7 +179,18 @@ export function createPtyRuntime(): PtyRuntime {
     pendingPtyDataChunksBySession.delete(sessionId)
     pendingPtyDataCharsBySession.delete(sessionId)
 
-    const eventPayload: TerminalDataEvent = { sessionId, data: chunks.join('') }
+    const data = chunks.length === 1 ? (chunks[0] ?? '') : chunks.join('')
+    if (data.length === 0) {
+      return
+    }
+
+    ptyManager.appendSnapshotData(sessionId, data)
+
+    if (!hasPtyDataSubscribers(sessionId)) {
+      return
+    }
+
+    const eventPayload: TerminalDataEvent = { sessionId, data }
     sendPtyDataToSubscribers(eventPayload)
   }
 
@@ -178,25 +205,33 @@ export function createPtyRuntime(): PtyRuntime {
     }
 
     chunks.push(data)
-    pendingPtyDataCharsBySession.set(
-      sessionId,
-      (pendingPtyDataCharsBySession.get(sessionId) ?? 0) + data.length,
-    )
+    const pendingChars = (pendingPtyDataCharsBySession.get(sessionId) ?? 0) + data.length
+    pendingPtyDataCharsBySession.set(sessionId, pendingChars)
 
-    if ((pendingPtyDataCharsBySession.get(sessionId) ?? 0) >= PTY_DATA_MAX_BATCH_CHARS) {
+    if (pendingChars >= PTY_DATA_MAX_BATCH_CHARS) {
       flushPtyDataBroadcast(sessionId)
       return
     }
 
-    if (pendingPtyDataFlushTimerBySession.has(sessionId)) {
-      return
+    const nextDelayMs = resolvePtyDataFlushDelay(pendingChars)
+    const existingTimer = pendingPtyDataFlushTimerBySession.get(sessionId)
+    const existingDelayMs = pendingPtyDataFlushDelayBySession.get(sessionId)
+
+    if (existingTimer && existingDelayMs !== undefined) {
+      if (existingDelayMs >= nextDelayMs) {
+        return
+      }
+
+      clearTimeout(existingTimer)
+      pendingPtyDataFlushTimerBySession.delete(sessionId)
     }
 
+    pendingPtyDataFlushDelayBySession.set(sessionId, nextDelayMs)
     pendingPtyDataFlushTimerBySession.set(
       sessionId,
       setTimeout(() => {
         flushPtyDataBroadcast(sessionId)
-      }, PTY_DATA_FLUSH_DELAY_MS),
+      }, nextDelayMs),
     )
   }
 
@@ -353,8 +388,6 @@ export function createPtyRuntime(): PtyRuntime {
         terminalProbeBufferBySession.set(sessionId, probeBuffer.slice(-32))
       }
 
-      ptyManager.appendSnapshotData(sessionId, data)
-
       queuePtyDataBroadcast(sessionId, data)
     })
 
@@ -404,6 +437,8 @@ export function createPtyRuntime(): PtyRuntime {
       const subscribers = ptyDataSubscribersBySessionId.get(sessionId) ?? new Set<number>()
       subscribers.add(contentsId)
       ptyDataSubscribersBySessionId.set(sessionId, subscribers)
+
+      flushPtyDataBroadcast(sessionId)
     },
     detach: (contentsId, sessionId) => {
       const sessions = ptyDataSessionsByWebContentsId.get(contentsId)
@@ -418,7 +453,10 @@ export function createPtyRuntime(): PtyRuntime {
         ptyDataSubscribersBySessionId.delete(sessionId)
       }
     },
-    snapshot: sessionId => ptyManager.snapshot(sessionId),
+    snapshot: sessionId => {
+      flushPtyDataBroadcast(sessionId)
+      return ptyManager.snapshot(sessionId)
+    },
     startSessionStateWatcher,
     dispose: () => {
       stateWatcherBySession.forEach(watcher => {
@@ -431,6 +469,7 @@ export function createPtyRuntime(): PtyRuntime {
         clearTimeout(timer)
       })
       pendingPtyDataFlushTimerBySession.clear()
+      pendingPtyDataFlushDelayBySession.clear()
       pendingPtyDataChunksBySession.clear()
       pendingPtyDataCharsBySession.clear()
       ptyDataSubscribersBySessionId.clear()
