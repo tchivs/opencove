@@ -71,7 +71,7 @@ describe('main process lifecycle', () => {
       },
     }))
 
-    vi.doMock('../../../src/main/ipc/registerIpcHandlers', () => ({
+    vi.doMock('../../../src/app/main/ipc/registerIpcHandlers', () => ({
       registerIpcHandlers: () => ({ dispose }),
     }))
 
@@ -166,7 +166,7 @@ describe('main process lifecycle', () => {
         },
       }))
 
-      vi.doMock('../../../src/main/ipc/registerIpcHandlers', () => ({
+      vi.doMock('../../../src/app/main/ipc/registerIpcHandlers', () => ({
         registerIpcHandlers: () => ({ dispose }),
       }))
 
@@ -285,7 +285,7 @@ describe('main process lifecycle', () => {
         },
       }))
 
-      vi.doMock('../../../src/main/ipc/registerIpcHandlers', () => ({
+      vi.doMock('../../../src/app/main/ipc/registerIpcHandlers', () => ({
         registerIpcHandlers: () => ({ dispose }),
       }))
 
@@ -406,7 +406,7 @@ describe('main process lifecycle', () => {
         },
       }))
 
-      vi.doMock('../../../src/main/ipc/registerIpcHandlers', () => ({
+      vi.doMock('../../../src/app/main/ipc/registerIpcHandlers', () => ({
         registerIpcHandlers: () => ({ dispose }),
       }))
 

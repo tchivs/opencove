@@ -1,3 +1,1 @@
-export interface IpcRegistrationDisposable {
-  dispose: () => void
-}
+export * from '../../app/main/ipc/types'
