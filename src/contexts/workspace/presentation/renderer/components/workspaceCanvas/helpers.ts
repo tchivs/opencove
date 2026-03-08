@@ -1,7 +1,23 @@
+import type { Node, ReactFlowInstance } from '@xyflow/react'
 import { AGENT_PROVIDER_LABEL, type AgentProvider } from '@contexts/settings/domain/agentSettings'
 import type { TaskPriority, TerminalNodeData, WorkspaceSpaceState } from '../../types'
 import { TASK_PRIORITIES } from './constants'
 import type { TrackpadGestureAction, TrackpadGestureTarget } from './types'
+
+export function focusNodeInViewport(
+  reactFlow: ReactFlowInstance<Node<TerminalNodeData>>,
+  node: Pick<Node<TerminalNodeData>, 'position' | 'data'>,
+  options: { duration?: number; zoom?: number } = {},
+): void {
+  reactFlow.setCenter(
+    node.position.x + node.data.width / 2,
+    node.position.y + node.data.height / 2,
+    {
+      duration: options.duration ?? 120,
+      zoom: options.zoom ?? 1,
+    },
+  )
+}
 
 export function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))

@@ -2,7 +2,10 @@ import React from 'react'
 import { AGENT_PROVIDER_LABEL } from '@contexts/settings/domain/agentSettings'
 import type { PersistNotice, ProjectContextMenuState } from '../types'
 import { toRelativeTime } from '../utils/format'
-import type { TerminalNodeData, WorkspaceState } from '@contexts/workspace/presentation/renderer/types'
+import type {
+  TerminalNodeData,
+  WorkspaceState,
+} from '@contexts/workspace/presentation/renderer/types'
 
 type SidebarAgentStatus = 'working' | 'standby'
 

@@ -300,6 +300,7 @@ function WorkspaceCanvasInner({
   })
   const {
     clearNodeSelection,
+    handleNodeClick,
     handleSelectionContextMenu,
     handleNodeContextMenu,
     handlePaneContextMenu,
@@ -312,6 +313,7 @@ function WorkspaceCanvasInner({
     createTerminalNode,
   } = workspaceCanvasHooks.useWorkspaceCanvasInteractions({
     isTrackpadCanvasMode,
+    normalizeZoomOnNodeClick: agentSettings.normalizeZoomOnTerminalClick,
     isShiftPressedRef,
     selectionDraftRef,
     setSelectionDraftUi,
@@ -405,6 +407,7 @@ function WorkspaceCanvasInner({
       onNodesChange={applyChanges}
       onPaneClick={handlePaneClickWithSpaceMenuClose}
       onPaneContextMenu={handlePaneContextMenuWithSpaceMenuClose}
+      onNodeClick={handleNodeClick}
       onNodeContextMenu={handleNodeContextMenuWithSpaceMenuClose}
       onSelectionContextMenu={handleSelectionContextMenuWithSpaceMenuClose}
       onSelectionChange={handleSelectionChange}

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Node, ReactFlowInstance } from '@xyflow/react'
 import type { Size, TaskRuntimeStatus, TerminalNodeData } from '../../../types'
+import { focusNodeInViewport } from '../helpers'
 
 export interface WorkspaceCanvasActionRefs {
   closeNodeRef: React.MutableRefObject<(nodeId: string) => Promise<void>>
@@ -159,14 +160,7 @@ export function useWorkspaceCanvasSyncActionRefs({
         return
       }
 
-      reactFlow.setCenter(
-        targetNode.position.x + targetNode.data.width / 2,
-        targetNode.position.y + targetNode.data.height / 2,
-        {
-          duration: 120,
-          zoom: 1,
-        },
-      )
+      focusNodeInViewport(reactFlow, targetNode, { duration: 120, zoom: 1 })
     }
   }, [
     actionRefs.normalizeViewportForTerminalInteractionRef,

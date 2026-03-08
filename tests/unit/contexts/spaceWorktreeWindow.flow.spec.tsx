@@ -251,7 +251,10 @@ describe('SpaceWorktreeWindow flow', () => {
       expect(onUpdateSpaceDirectory).toHaveBeenCalledWith(
         'space-1',
         '/repo/.cove/worktrees/space-demo--1a2b3c4d',
-        { markNodeDirectoryMismatch: true },
+        expect.objectContaining({
+          markNodeDirectoryMismatch: true,
+          renameSpaceTo: 'space/demo',
+        }),
       )
       expect(onClose).toHaveBeenCalledTimes(1)
     })

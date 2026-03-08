@@ -116,7 +116,7 @@ export function CanvasSection(props: {
       <div className="settings-panel__row">
         <div className="settings-panel__row-label">
           <strong>Auto-zoom on Click</strong>
-          <span>Zoom to 100% when a terminal is clicked.</span>
+          <span>Zoom to 100% when a node is clicked.</span>
         </div>
         <div className="settings-panel__control">
           <label className="cove-toggle">

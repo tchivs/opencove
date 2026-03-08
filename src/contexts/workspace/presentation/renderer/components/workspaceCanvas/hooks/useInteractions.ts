@@ -7,6 +7,7 @@ import type {
   EmptySelectionPromptState,
   SelectionDraftState,
 } from '../types'
+import { focusNodeInViewport } from '../helpers'
 import { useWorkspaceCanvasSelectionDraft } from './useSelectionDraft'
 import {
   assignNodeToSpaceAndExpand,
@@ -25,6 +26,7 @@ type SelectionDraftUiState = Pick<
 
 interface UseWorkspaceCanvasInteractionsParams {
   isTrackpadCanvasMode: boolean
+  normalizeZoomOnNodeClick: boolean
   isShiftPressedRef: React.MutableRefObject<boolean>
   selectionDraftRef: React.MutableRefObject<SelectionDraftState | null>
   setSelectionDraftUi: React.Dispatch<React.SetStateAction<SelectionDraftUiState | null>>
@@ -48,6 +50,7 @@ interface UseWorkspaceCanvasInteractionsParams {
 
 export function useWorkspaceCanvasInteractions({
   isTrackpadCanvasMode,
+  normalizeZoomOnNodeClick,
   isShiftPressedRef,
   selectionDraftRef,
   setSelectionDraftUi,
@@ -70,6 +73,7 @@ export function useWorkspaceCanvasInteractions({
 }: UseWorkspaceCanvasInteractionsParams): {
   clearNodeSelection: () => void
   handleCanvasDoubleClickCapture: React.MouseEventHandler<HTMLDivElement>
+  handleNodeClick: (event: React.MouseEvent, node: Node<TerminalNodeData>) => void
   handleSelectionContextMenu: (
     event: React.MouseEvent,
     selectedNodes: Node<TerminalNodeData>[],
@@ -84,6 +88,26 @@ export function useWorkspaceCanvasInteractions({
   createTerminalNode: () => Promise<void>
 } {
   const reactFlowStore = useStoreApi()
+
+  const shouldFocusNodeFromClickTarget = useCallback((target: EventTarget | null): boolean => {
+    if (!(target instanceof Element)) {
+      return true
+    }
+
+    if (target.closest('[data-node-drag-handle=true]')) {
+      return false
+    }
+
+    if (target.closest('.terminal-node__terminal')) {
+      return false
+    }
+
+    if (target.closest('button')) {
+      return false
+    }
+
+    return true
+  }, [])
 
   const clearNodeSelection = useCallback(() => {
     setNodes(
@@ -132,6 +156,21 @@ export function useWorkspaceCanvasInteractions({
       openSelectionContextMenu(event.clientX, event.clientY)
     },
     [openSelectionContextMenu],
+  )
+
+  const handleNodeClick = useCallback(
+    (event: React.MouseEvent, node: Node<TerminalNodeData>) => {
+      if (!normalizeZoomOnNodeClick) {
+        return
+      }
+
+      if (!shouldFocusNodeFromClickTarget(event.target)) {
+        return
+      }
+
+      focusNodeInViewport(reactFlow, node, { duration: 120, zoom: 1 })
+    },
+    [normalizeZoomOnNodeClick, reactFlow, shouldFocusNodeFromClickTarget],
   )
 
   const handleNodeContextMenu = useCallback(
@@ -430,6 +469,7 @@ export function useWorkspaceCanvasInteractions({
   return {
     clearNodeSelection,
     handleCanvasDoubleClickCapture,
+    handleNodeClick,
     handleSelectionContextMenu,
     handleNodeContextMenu,
     handlePaneContextMenu,

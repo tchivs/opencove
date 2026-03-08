@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { Edge, Node, ReactFlowInstance, Viewport } from '@xyflow/react'
 import type { TerminalNodeData } from '../../../types'
+import { focusNodeInViewport } from '../helpers'
 import {
   createCanvasInputModalityState,
   type CanvasInputModalityState,
@@ -169,13 +170,6 @@ export function useWorkspaceCanvasLifecycle({
       return
     }
 
-    reactFlow.setCenter(
-      target.position.x + target.data.width / 2,
-      target.position.y + target.data.height / 2,
-      {
-        duration: 220,
-        zoom: 1,
-      },
-    )
+    focusNodeInViewport(reactFlow, target, { duration: 220, zoom: 1 })
   }, [focusNodeId, focusSequence, nodesRef, reactFlow])
 }
