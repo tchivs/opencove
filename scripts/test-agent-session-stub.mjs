@@ -18,7 +18,7 @@ function toDateDirectoryParts(timestampMs) {
   return [year, month, day]
 }
 
-async function runCodexStandbyNoNewlineScenario(cwd) {
+async function createCodexSessionFile(cwd) {
   const startedAtMs = Date.now()
   const sessionId = `cove-test-session-${startedAtMs}`
   const [year, month, day] = toDateDirectoryParts(startedAtMs)
@@ -48,27 +48,35 @@ async function runCodexStandbyNoNewlineScenario(cwd) {
     'utf8',
   )
 
+  return sessionFilePath
+}
+
+async function appendCodexRecord(sessionFilePath, record, { newline = true } = {}) {
+  const serialized = JSON.stringify(record)
+  await fs.appendFile(sessionFilePath, newline ? `${serialized}\n` : serialized, 'utf8')
+}
+
+async function runCodexStandbyNoNewlineScenario(cwd) {
+  const sessionFilePath = await createCodexSessionFile(cwd)
+
   await sleep(800)
-  await fs.appendFile(
-    sessionFilePath,
-    `${JSON.stringify({
-      type: 'response_item',
-      payload: {
-        type: 'reasoning',
-        summary: [],
-      },
-    })}\n`,
-    'utf8',
-  )
+  await appendCodexRecord(sessionFilePath, {
+    type: 'response_item',
+    payload: {
+      type: 'reasoning',
+      summary: [],
+    },
+  })
 
   await sleep(1200)
-  await fs.appendFile(
+  await appendCodexRecord(
     sessionFilePath,
-    JSON.stringify({
+    {
       type: 'response_item',
       payload: {
         type: 'message',
         role: 'assistant',
+        phase: 'final_answer',
         content: [
           {
             type: 'output_text',
@@ -76,8 +84,70 @@ async function runCodexStandbyNoNewlineScenario(cwd) {
           },
         ],
       },
-    }),
-    'utf8',
+    },
+    { newline: false },
+  )
+
+  await sleep(20_000)
+}
+
+async function runCodexCommentaryThenFinalScenario(cwd) {
+  const sessionFilePath = await createCodexSessionFile(cwd)
+
+  await sleep(700)
+  await appendCodexRecord(sessionFilePath, {
+    type: 'response_item',
+    payload: {
+      type: 'reasoning',
+      summary: [],
+    },
+  })
+
+  await sleep(1200)
+  await appendCodexRecord(sessionFilePath, {
+    type: 'response_item',
+    payload: {
+      type: 'message',
+      role: 'assistant',
+      phase: 'commentary',
+      content: [
+        {
+          type: 'output_text',
+          text: 'I am checking the repo before making changes.',
+        },
+      ],
+    },
+  })
+
+  await sleep(1200)
+  await appendCodexRecord(sessionFilePath, {
+    type: 'response_item',
+    payload: {
+      type: 'function_call',
+      call_id: 'call-cove-test-1',
+      name: 'exec_command',
+      arguments: '{"cmd":"pwd"}',
+    },
+  })
+
+  await sleep(1800)
+  await appendCodexRecord(
+    sessionFilePath,
+    {
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'assistant',
+        phase: 'final_answer',
+        content: [
+          {
+            type: 'output_text',
+            text: 'Done.',
+          },
+        ],
+      },
+    },
+    { newline: false },
   )
 
   await sleep(20_000)
@@ -97,6 +167,11 @@ async function main() {
 
   if (provider === 'codex' && scenario === 'codex-standby-no-newline') {
     await runCodexStandbyNoNewlineScenario(cwd)
+    return
+  }
+
+  if (provider === 'codex' && scenario === 'codex-commentary-then-final') {
+    await runCodexCommentaryThenFinalScenario(cwd)
     return
   }
 

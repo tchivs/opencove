@@ -54,7 +54,45 @@ describe('detectTurnStateFromSessionLine', () => {
     expect(detectTurnStateFromSessionLine('claude-code', line)).toBe('working')
   })
 
-  it('detects codex assistant message as standby', () => {
+  it('treats codex assistant commentary messages as working', () => {
+    const line = JSON.stringify({
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'assistant',
+        phase: 'commentary',
+        content: [
+          {
+            type: 'output_text',
+            text: 'I am checking the repo.',
+          },
+        ],
+      },
+    })
+
+    expect(detectTurnStateFromSessionLine('codex', line)).toBe('working')
+  })
+
+  it('treats codex assistant final answers as standby', () => {
+    const line = JSON.stringify({
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'assistant',
+        phase: 'final_answer',
+        content: [
+          {
+            type: 'output_text',
+            text: 'All set.',
+          },
+        ],
+      },
+    })
+
+    expect(detectTurnStateFromSessionLine('codex', line)).toBe('standby')
+  })
+
+  it('treats codex assistant messages without phase as standby for compatibility', () => {
     const line = JSON.stringify({
       type: 'response_item',
       payload: {
@@ -63,7 +101,7 @@ describe('detectTurnStateFromSessionLine', () => {
         content: [
           {
             type: 'output_text',
-            text: 'All set.',
+            text: 'Legacy message without phase.',
           },
         ],
       },
@@ -84,7 +122,7 @@ describe('detectTurnStateFromSessionLine', () => {
     expect(detectTurnStateFromSessionLine('codex', line)).toBe('working')
   })
 
-  it('treats codex user messages as standby', () => {
+  it('ignores codex user messages so they do not start working prematurely', () => {
     const line = JSON.stringify({
       type: 'event_msg',
       payload: {
@@ -93,10 +131,10 @@ describe('detectTurnStateFromSessionLine', () => {
       },
     })
 
-    expect(detectTurnStateFromSessionLine('codex', line)).toBe('standby')
+    expect(detectTurnStateFromSessionLine('codex', line)).toBeNull()
   })
 
-  it('treats codex agent messages as standby', () => {
+  it('ignores codex legacy agent messages as non-authoritative boundaries', () => {
     const line = JSON.stringify({
       type: 'event_msg',
       payload: {
@@ -105,7 +143,7 @@ describe('detectTurnStateFromSessionLine', () => {
       },
     })
 
-    expect(detectTurnStateFromSessionLine('codex', line)).toBe('standby')
+    expect(detectTurnStateFromSessionLine('codex', line)).toBeNull()
   })
 
   it('accepts leading and trailing whitespace around valid JSON', () => {

@@ -29,7 +29,7 @@ describe('SessionTurnStateWatcher', () => {
     }
   })
 
-  it('emits standby for a complete trailing JSON record without a newline', async () => {
+  it('emits standby for a complete trailing final-answer record without a newline', async () => {
     const tempDir = await fs.mkdtemp(join(tmpdir(), 'cove-session-watcher-'))
     const filePath = join(tempDir, 'session.jsonl')
 
@@ -69,7 +69,112 @@ describe('SessionTurnStateWatcher', () => {
         payload: {
           type: 'message',
           role: 'assistant',
+          phase: 'final_answer',
           content: [],
+        },
+      }),
+      'utf8',
+    )
+
+    await waitForCondition(() => {
+      expect(states).toEqual(['working', 'standby'])
+    })
+  })
+
+  it('keeps codex commentary in working until the final answer arrives', async () => {
+    const tempDir = await fs.mkdtemp(join(tmpdir(), 'cove-session-watcher-'))
+    const filePath = join(tempDir, 'session.jsonl')
+
+    await fs.writeFile(filePath, '', 'utf8')
+
+    const states: string[] = []
+    const watcher = new SessionTurnStateWatcher({
+      provider: 'codex',
+      sessionId: 'session-2',
+      filePath,
+      onState: (_sessionId, state) => {
+        states.push(state)
+      },
+    })
+
+    disposers.push(() => watcher.dispose())
+    watcher.start()
+
+    await fs.appendFile(
+      filePath,
+      `${JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'reasoning',
+          summary: [],
+        },
+      })}\n`,
+      'utf8',
+    )
+
+    await waitForCondition(() => {
+      expect(states).toEqual(['working'])
+    })
+
+    await fs.appendFile(
+      filePath,
+      `${JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          phase: 'commentary',
+          content: [
+            {
+              type: 'output_text',
+              text: 'I am still working.',
+            },
+          ],
+        },
+      })}\n`,
+      'utf8',
+    )
+
+    await new Promise(resolve => {
+      setTimeout(resolve, 80)
+    })
+
+    expect(states).toEqual(['working'])
+
+    await fs.appendFile(
+      filePath,
+      `${JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          call_id: 'call-1',
+          name: 'exec_command',
+          arguments: '{}',
+        },
+      })}\n`,
+      'utf8',
+    )
+
+    await new Promise(resolve => {
+      setTimeout(resolve, 80)
+    })
+
+    expect(states).toEqual(['working'])
+
+    await fs.appendFile(
+      filePath,
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          phase: 'final_answer',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Done.',
+            },
+          ],
         },
       }),
       'utf8',
@@ -89,7 +194,7 @@ describe('SessionTurnStateWatcher', () => {
     const states: string[] = []
     const watcher = new SessionTurnStateWatcher({
       provider: 'codex',
-      sessionId: 'session-2',
+      sessionId: 'session-3',
       filePath,
       onState: (_sessionId, state) => {
         states.push(state)

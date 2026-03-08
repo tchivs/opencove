@@ -86,6 +86,12 @@ function detectClaudeTurnState(parsed: unknown): TerminalSessionState | null {
   return null
 }
 
+// Codex's authoritative working indicator lives in the TUI's in-memory
+// turn lifecycle (`task_running`), not in any single rollout message. This
+// detector therefore uses a file-level fallback: keep `commentary` in
+// `working`, only downgrade assistant messages to `standby` at `final_answer`
+// (or legacy no-phase compatibility), and ignore legacy `user_message` /
+// `agent_message` boundaries because they are not reliable turn-state owners.
 function detectCodexTurnState(parsed: unknown): TerminalSessionState | null {
   if (!isRecord(parsed) || typeof parsed.type !== 'string') {
     return null
@@ -97,7 +103,15 @@ function detectCodexTurnState(parsed: unknown): TerminalSessionState | null {
       return null
     }
 
-    if (payload.type === 'message' && payload.role === 'assistant') {
+    if (payload.type === 'message') {
+      if (payload.role !== 'assistant') {
+        return null
+      }
+
+      if (payload.phase === 'commentary') {
+        return 'working'
+      }
+
       return 'standby'
     }
 
@@ -120,11 +134,7 @@ function detectCodexTurnState(parsed: unknown): TerminalSessionState | null {
       return 'working'
     }
 
-    if (
-      payload.type === 'agent_message' ||
-      payload.type === 'user_message' ||
-      payload.type === 'turn_aborted'
-    ) {
+    if (payload.type === 'turn_aborted') {
       return 'standby'
     }
   }
