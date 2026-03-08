@@ -125,7 +125,10 @@ export function useWorkspaceCanvasInteractions({
     )
     setSelectedNodeIds([])
     setSelectedSpaceIds([])
-    reactFlowStore.setState({ nodesSelectionActive: false })
+    reactFlowStore.setState({
+      nodesSelectionActive: false,
+      coveDragSurfaceSelectionMode: false,
+    } as unknown as Parameters<typeof reactFlowStore.setState>[0])
   }, [reactFlowStore, setNodes, setSelectedNodeIds, setSelectedSpaceIds])
 
   const openSelectionContextMenu = useCallback(

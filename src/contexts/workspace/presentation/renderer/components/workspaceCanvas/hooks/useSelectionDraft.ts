@@ -142,7 +142,10 @@ export function useWorkspaceCanvasSelectionDraft({
           selectedNodeIdsRef.current = []
           setSelectedNodeIds([])
           setSortedSelectedSpaceIds([], selectedSpaceIdsRef, setSelectedSpaceIds)
-          reactFlowStore.setState({ nodesSelectionActive: false })
+          reactFlowStore.setState({
+            nodesSelectionActive: false,
+            coveDragSurfaceSelectionMode: false,
+          } as unknown as Parameters<typeof reactFlowStore.setState>[0])
         }
 
         return false
@@ -150,7 +153,13 @@ export function useWorkspaceCanvasSelectionDraft({
 
       draft.phase = 'settling'
       applyDraftSelection(draft, { forceDeselectIntersectingNodes: true })
-      reactFlowStore.setState({ nodesSelectionActive: selectedNodeIdsRef.current.length > 0 })
+      const hasSelectedNodes = selectedNodeIdsRef.current.length > 0
+      const shouldEnableDragSurfaceSelectionMode =
+        hasSelectedNodes && (draft.toggleSelection || !isTrackpadCanvasMode)
+      reactFlowStore.setState({
+        nodesSelectionActive: hasSelectedNodes,
+        coveDragSurfaceSelectionMode: shouldEnableDragSurfaceSelectionMode,
+      } as unknown as Parameters<typeof reactFlowStore.setState>[0])
       setEmptySelectionPrompt(null)
 
       window.requestAnimationFrame(() => {
@@ -170,6 +179,7 @@ export function useWorkspaceCanvasSelectionDraft({
     [
       applyDraftSelection,
       detachGlobalPointerListeners,
+      isTrackpadCanvasMode,
       reactFlowStore,
       selectionDraftRef,
       selectedNodeIdsRef,

@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState, type JSX } from 'react'
-import { Handle, Position } from '@xyflow/react'
+import { Handle, Position, useStore } from '@xyflow/react'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import { resolveStablePtySize } from '../utils/terminalResize'
 import { TERMINAL_LAYOUT_SYNC_EVENT } from './terminalNode/constants'
 import {
   createTerminalCommandInputState,
@@ -17,6 +16,7 @@ import {
   setCachedTerminalScreenState,
 } from './terminalNode/screenStateCache'
 import { TerminalNodeHeader } from './terminalNode/TerminalNodeHeader'
+import { syncTerminalNodeSize } from './terminalNode/syncTerminalNodeSize'
 import { resolveSuffixPrefixOverlap } from './terminalNode/overlap'
 import { resolveTerminalNodeInteraction } from './terminalNode/interaction'
 import { useTerminalResize } from './terminalNode/useTerminalResize'
@@ -29,6 +29,8 @@ export function TerminalNode({
   sessionId,
   title,
   kind,
+  isSelected = false,
+  isDragging = false,
   status,
   directoryMismatch,
   lastError,
@@ -43,6 +45,10 @@ export function TerminalNode({
   onCommandRun,
   onInteractionStart,
 }: TerminalNodeProps): JSX.Element {
+  const dragSurfaceSelectionMode = useStore(
+    state => (state as { coveDragSurfaceSelectionMode?: boolean }).coveDragSurfaceSelectionMode,
+  )
+
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -77,46 +83,13 @@ export function TerminalNode({
   }, [sessionId])
 
   const syncTerminalSize = useCallback(() => {
-    const terminal = terminalRef.current
-    const fitAddon = fitAddonRef.current
-    const container = containerRef.current
-
-    if (!terminal || !fitAddon || !container) {
-      return
-    }
-
-    if (container.clientWidth <= 2 || container.clientHeight <= 2) {
-      return
-    }
-
-    if (isPointerResizingRef.current) {
-      return
-    }
-
-    fitAddon.fit()
-
-    if (terminal.cols <= 0 || terminal.rows <= 0) {
-      return
-    }
-
-    terminal.refresh(0, Math.max(0, terminal.rows - 1))
-
-    const nextPtySize = resolveStablePtySize({
-      previous: lastSyncedPtySizeRef.current,
-      measured: { cols: terminal.cols, rows: terminal.rows },
-      preventRowShrink: false,
-    })
-
-    if (!nextPtySize) {
-      return
-    }
-
-    lastSyncedPtySizeRef.current = nextPtySize
-
-    void window.coveApi.pty.resize({
+    syncTerminalNodeSize({
+      terminalRef,
+      fitAddonRef,
+      containerRef,
+      isPointerResizingRef,
+      lastSyncedPtySizeRef,
       sessionId,
-      cols: nextPtySize.cols,
-      rows: nextPtySize.rows,
     })
   }, [sessionId])
 
@@ -430,10 +403,11 @@ export function TerminalNode({
   }, [height, syncTerminalSize, width])
 
   const isAgentNode = kind === 'agent'
+  const hasSelectedDragSurface = dragSurfaceSelectionMode === true && (isSelected || isDragging)
 
   return (
     <div
-      className="terminal-node nowheel"
+      className={`terminal-node nowheel ${hasSelectedDragSurface ? 'terminal-node--selected-surface' : ''}`.trim()}
       style={sizeStyle}
       onClickCapture={event => {
         if (event.button !== 0) {
@@ -448,6 +422,7 @@ export function TerminalNode({
         event.stopPropagation()
         onInteractionStart?.({
           normalizeViewport: interaction.normalizeViewport,
+          selectNode: interaction.selectNode || event.shiftKey,
           shiftKey: event.shiftKey,
         })
       }}
@@ -476,6 +451,13 @@ export function TerminalNode({
         className={`terminal-node__terminal nodrag ${isTerminalHydrated ? '' : 'terminal-node__terminal--hydrating'}`.trim()}
         aria-busy={sessionId.trim().length > 0 && isTerminalHydrated ? 'false' : 'true'}
       />
+      {hasSelectedDragSurface ? (
+        <div
+          className="terminal-node__selected-drag-overlay"
+          data-testid="terminal-node-selected-drag-overlay"
+          aria-hidden="true"
+        />
+      ) : null}
       <button
         type="button"
         className="terminal-node__resizer terminal-node__resizer--right nodrag"

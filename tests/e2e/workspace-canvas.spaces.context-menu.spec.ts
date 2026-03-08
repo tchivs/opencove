@@ -24,8 +24,9 @@ test.describe('Workspace Canvas - Spaces (Menu & Switch)', () => {
       ])
 
       const terminalNode = window.locator('.terminal-node').first()
+      const header = terminalNode.locator('.terminal-node__header')
       await expect(terminalNode).toBeVisible()
-      await terminalNode.click()
+      await header.click({ position: { x: 40, y: 20 } })
 
       const pane = window.locator('.workspace-canvas .react-flow__pane')
       await pane.click({
@@ -57,9 +58,10 @@ test.describe('Workspace Canvas - Spaces (Menu & Switch)', () => {
       ])
 
       const terminalNode = window.locator('.terminal-node').first()
+      const header = terminalNode.locator('.terminal-node__header')
       await expect(terminalNode).toBeVisible()
 
-      await terminalNode.click()
+      await header.click({ position: { x: 40, y: 20 } })
       await terminalNode.click({ button: 'right' })
       await window.locator('[data-testid="workspace-selection-create-space"]').click()
 
@@ -91,16 +93,16 @@ test.describe('Workspace Canvas - Spaces (Menu & Switch)', () => {
       ])
 
       const terminalNode = window.locator('.terminal-node').first()
+      const header = terminalNode.locator('.terminal-node__header')
       await expect(terminalNode).toBeVisible()
 
-      await terminalNode.click()
+      await header.click({ position: { x: 40, y: 20 } })
       await terminalNode.click({ button: 'right' })
       await window.locator('[data-testid="workspace-selection-create-space"]').click()
 
       await expect(window.locator('.workspace-space-switcher')).toHaveCount(1)
       await expect(window.locator('.workspace-space-region')).toHaveCount(1)
 
-      const header = terminalNode.locator('.terminal-node__header')
       const pane = window.locator('.workspace-canvas .react-flow__pane')
       await expect(pane).toBeVisible()
 
@@ -158,9 +160,10 @@ test.describe('Workspace Canvas - Spaces (Menu & Switch)', () => {
       ])
 
       const terminalNode = window.locator('.terminal-node').first()
+      const header = terminalNode.locator('.terminal-node__header')
       await expect(terminalNode).toBeVisible()
 
-      await terminalNode.click()
+      await header.click({ position: { x: 40, y: 20 } })
       await terminalNode.click({ button: 'right' })
       await window.locator('[data-testid="workspace-selection-create-space"]').click()
 

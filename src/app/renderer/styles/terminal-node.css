@@ -18,6 +18,14 @@
   position: relative;
 }
 
+.terminal-node--selected-surface {
+  border-color: rgba(153, 223, 255, 0.9);
+  box-shadow:
+    0 0 0 1px rgba(168, 233, 255, 0.56),
+    0 16px 34px rgba(0, 0, 0, 0.52),
+    0 0 24px rgba(132, 214, 255, 0.4);
+}
+
 .terminal-node__header {
   height: 34px;
   display: flex;
@@ -70,6 +78,22 @@
 
 .terminal-node__terminal .xterm-viewport {
   overscroll-behavior: contain;
+}
+
+.terminal-node__selected-drag-overlay {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  cursor: grab;
+  background: transparent;
+  touch-action: none;
+}
+
+.terminal-node__selected-drag-overlay:active {
+  cursor: grabbing;
 }
 
 .terminal-node__resizer {

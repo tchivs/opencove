@@ -1,5 +1,6 @@
 interface TerminalNodeInteraction {
   normalizeViewport: boolean
+  selectNode: boolean
 }
 
 export function resolveTerminalNodeInteraction(
@@ -13,7 +14,22 @@ export function resolveTerminalNodeInteraction(
     return null
   }
 
+  if (target.closest('.terminal-node__selected-drag-overlay')) {
+    return {
+      normalizeViewport: false,
+      selectNode: false,
+    }
+  }
+
+  if (target.closest('.terminal-node__terminal')) {
+    return {
+      normalizeViewport: true,
+      selectNode: false,
+    }
+  }
+
   return {
-    normalizeViewport: Boolean(target.closest('.terminal-node__terminal')),
+    normalizeViewport: false,
+    selectNode: true,
   }
 }

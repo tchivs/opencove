@@ -1,10 +1,18 @@
 import type { AgentRuntimeStatus, WorkspaceNodeKind } from '../types'
 
+export interface TerminalNodeInteractionOptions {
+  normalizeViewport?: boolean
+  selectNode?: boolean
+  shiftKey?: boolean
+}
+
 export interface TerminalNodeProps {
   nodeId: string
   sessionId: string
   title: string
   kind: WorkspaceNodeKind
+  isSelected?: boolean
+  isDragging?: boolean
   status: AgentRuntimeStatus | null
   directoryMismatch?: { executionDirectory: string; expectedDirectory: string } | null
   lastError: string | null
@@ -17,5 +25,5 @@ export interface TerminalNodeProps {
   onScrollbackChange?: (scrollback: string) => void
   onTitleCommit?: (title: string) => void
   onCommandRun?: (command: string) => void
-  onInteractionStart?: (options?: { normalizeViewport?: boolean; shiftKey?: boolean }) => void
+  onInteractionStart?: (options?: TerminalNodeInteractionOptions) => void
 }

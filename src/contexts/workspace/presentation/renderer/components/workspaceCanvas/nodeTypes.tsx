@@ -15,6 +15,8 @@ import type {
 function TerminalNodeType({
   data,
   id,
+  selected,
+  dragging,
   terminalFontSize,
   selectNode,
   closeNodeRef,
@@ -26,6 +28,8 @@ function TerminalNodeType({
 }: {
   data: TerminalNodeData
   id: string
+  selected?: boolean
+  dragging?: boolean
   terminalFontSize: number
   selectNode: (nodeId: string, options?: { toggle?: boolean }) => void
   closeNodeRef: MutableRefObject<(nodeId: string) => Promise<void>>
@@ -43,6 +47,8 @@ function TerminalNodeType({
       sessionId={data.sessionId}
       title={data.title}
       kind={data.kind}
+      isSelected={selected === true}
+      isDragging={dragging === true}
       status={data.status}
       directoryMismatch={
         data.kind === 'agent' &&
@@ -87,12 +93,14 @@ function TerminalNodeType({
           : undefined
       }
       onInteractionStart={options => {
-        if (options?.shiftKey === true) {
-          selectNode(id, { toggle: true })
-          return
-        }
+        if (options?.selectNode !== false) {
+          if (options?.shiftKey === true) {
+            selectNode(id, { toggle: true })
+            return
+          }
 
-        selectNode(id)
+          selectNode(id)
+        }
 
         if (options?.normalizeViewport === false) {
           return
@@ -203,15 +211,32 @@ export function useWorkspaceCanvasNodeTypes({
   renameTerminalTitleRef,
 }: WorkspaceCanvasNodeTypesParams): Record<
   string,
-  (props: { data: TerminalNodeData; id: string }) => ReactElement | null
+  (props: {
+    data: TerminalNodeData
+    id: string
+    selected?: boolean
+    dragging?: boolean
+  }) => ReactElement | null
 > {
   return useMemo(
     () => ({
-      terminalNode: ({ data, id }: { data: TerminalNodeData; id: string }) => {
+      terminalNode: ({
+        data,
+        id,
+        selected,
+        dragging,
+      }: {
+        data: TerminalNodeData
+        id: string
+        selected?: boolean
+        dragging?: boolean
+      }) => {
         return (
           <TerminalNodeType
             data={data}
             id={id}
+            selected={selected}
+            dragging={dragging}
             terminalFontSize={terminalFontSize}
             selectNode={selectNode}
             closeNodeRef={closeNodeRef}
