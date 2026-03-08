@@ -50,6 +50,7 @@ test.describe('Workspace Canvas - Agent Sidebar', () => {
 
       const agentItem = window.locator('.workspace-sidebar .workspace-agent-item').first()
       await expect(agentItem).toBeVisible()
+      await expect(agentItem.locator('.workspace-agent-item__task')).toHaveCount(0)
 
       const zoomInButton = window.locator('.react-flow__controls-zoomin')
       await expect(zoomInButton).toBeVisible()
@@ -311,10 +312,6 @@ test.describe('Workspace Canvas - Agent Sidebar', () => {
         'Standby',
       )
       await expect(doneItem.locator('.workspace-agent-item__status--agent')).toHaveText('Working')
-
-      await expect(doingItem.locator('.workspace-agent-item__status--task')).toHaveText('DOING')
-      await expect(requestItem.locator('.workspace-agent-item__status--task')).toHaveText('DOING')
-      await expect(doneItem.locator('.workspace-agent-item__status--task')).toHaveText('AI_DONE')
 
       await expect(doingItem.locator('.workspace-agent-item__task-text')).toHaveText(
         'Implement OAuth refresh flow',

@@ -2,29 +2,15 @@ import React from 'react'
 import { AGENT_PROVIDER_LABEL } from '@contexts/settings/domain/agentSettings'
 import type { PersistNotice, ProjectContextMenuState } from '../types'
 import { toRelativeTime } from '../utils/format'
-import type {
-  TaskRuntimeStatus,
-  TerminalNodeData,
-  WorkspaceState,
-} from '@contexts/workspace/presentation/renderer/types'
+import type { TerminalNodeData, WorkspaceState } from '@contexts/workspace/presentation/renderer/types'
 
 type SidebarAgentStatus = 'working' | 'standby'
 
-type SidebarTaskStatus = TaskRuntimeStatus | 'none'
-
-type SidebarStatusTone = 'working' | 'standby' | 'todo' | 'done' | 'done-strong'
+type SidebarStatusTone = 'working' | 'standby'
 
 const SIDEBAR_AGENT_STATUS_LABEL: Record<SidebarAgentStatus, string> = {
   working: 'Working',
   standby: 'Standby',
-}
-
-const SIDEBAR_TASK_STATUS_LABEL: Record<SidebarTaskStatus, string> = {
-  todo: 'TODO',
-  doing: 'DOING',
-  ai_done: 'AI_DONE',
-  done: 'DONE',
-  none: 'N/A',
 }
 
 function resolveSidebarAgentStatus(runtimeStatus: TerminalNodeData['status']): SidebarAgentStatus {
@@ -33,21 +19,6 @@ function resolveSidebarAgentStatus(runtimeStatus: TerminalNodeData['status']): S
   }
 
   return 'standby'
-}
-
-function resolveSidebarTaskStatusTone(taskStatus: SidebarTaskStatus): SidebarStatusTone {
-  switch (taskStatus) {
-    case 'doing':
-      return 'working'
-    case 'ai_done':
-      return 'done'
-    case 'done':
-      return 'done-strong'
-    case 'todo':
-    case 'none':
-    default:
-      return 'todo'
-  }
 }
 
 export function Sidebar({
@@ -166,26 +137,15 @@ export function Sidebar({
                           candidate.data.task?.linkedAgentNodeId === node.id,
                       ) ??
                       null
-                    const linkedTaskStatus =
-                      linkedTaskNode && linkedTaskNode.data.kind === 'task'
-                        ? (linkedTaskNode.data.task?.status ?? null)
-                        : null
                     const sidebarAgentStatus = resolveSidebarAgentStatus(node.data.status)
                     const sidebarAgentStatusText = SIDEBAR_AGENT_STATUS_LABEL[sidebarAgentStatus]
                     const sidebarAgentStatusTone: SidebarStatusTone =
                       sidebarAgentStatus === 'working' ? 'working' : 'standby'
-                    const sidebarTaskStatus: SidebarTaskStatus = linkedTaskStatus ?? 'none'
-                    const sidebarTaskStatusText = SIDEBAR_TASK_STATUS_LABEL[sidebarTaskStatus]
-                    const sidebarTaskStatusTone = resolveSidebarTaskStatusTone(sidebarTaskStatus)
                     const startedText = toRelativeTime(node.data.startedAt)
-                    const fallbackTaskTitle =
-                      node.data.agent?.prompt.trim().replace(/\s+/g, ' ') ?? ''
                     const taskTitle =
                       linkedTaskNode && linkedTaskNode.data.kind === 'task'
                         ? linkedTaskNode.data.title
-                        : fallbackTaskTitle.length > 0
-                          ? fallbackTaskTitle
-                          : 'No linked task'
+                        : null
 
                     return (
                       <button
@@ -210,14 +170,11 @@ export function Sidebar({
                             {sidebarAgentStatusText}
                           </span>
                         </span>
-                        <span className="workspace-agent-item__task" title={taskTitle}>
-                          <span className="workspace-agent-item__task-text">{taskTitle}</span>
-                          <span
-                            className={`workspace-agent-item__status workspace-agent-item__status--task workspace-agent-item__status--${sidebarTaskStatusTone}`}
-                          >
-                            {sidebarTaskStatusText}
+                        {taskTitle ? (
+                          <span className="workspace-agent-item__task" title={taskTitle}>
+                            <span className="workspace-agent-item__task-text">{taskTitle}</span>
                           </span>
-                        </span>
+                        ) : null}
                       </button>
                     )
                   })}
