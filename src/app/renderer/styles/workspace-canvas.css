@@ -50,7 +50,7 @@
   cursor: default;
 }
 
-.workspace-canvas[data-selected-node-count='1'] .react-flow__nodesselection-rect {
+.workspace-canvas .react-flow__nodesselection-rect {
   pointer-events: none;
 }
 

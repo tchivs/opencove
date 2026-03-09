@@ -140,4 +140,102 @@ describe('applySelectionDraft', () => {
     expect(selectedSpaceIdsState.value).toEqual([])
     expect(selectedNodeIdsRef.current).toEqual([])
   })
+
+  it('drops out-of-scope selected nodes during shift marquee selection inside a space', () => {
+    let nodes = [
+      createNode('node-in', { x: 40, y: 40, selected: false }),
+      createNode('node-out', { x: 420, y: 40, selected: true }),
+    ]
+    const selectedNodeIdsRef = { current: ['node-out'] }
+    const selectedSpaceIdsRef = { current: [] as string[] }
+    const selectedNodeIdsState = createStateSetter<string[]>(['node-out'])
+    const selectedSpaceIdsState = createStateSetter<string[]>([])
+    const spaces: WorkspaceSpaceState[] = [
+      {
+        id: 'space-a',
+        name: 'Space A',
+        directoryPath: '',
+        nodeIds: ['node-in'],
+        rect: {
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 240,
+        },
+      },
+    ]
+
+    applySelectionDraft({
+      draft: createDraft({
+        toggleSelection: true,
+        selectedNodeIdsAtStart: ['node-out'],
+        startSpaceId: 'space-a',
+      }),
+      reactFlow: identityReactFlow,
+      spaces,
+      selectedNodeIdsRef,
+      selectedSpaceIdsRef,
+      setNodes: updater => {
+        nodes = updater(nodes)
+      },
+      setSelectedNodeIds: selectedNodeIdsState.set,
+      setSelectedSpaceIds: selectedSpaceIdsState.set,
+    })
+
+    expect(nodes.find(node => node.id === 'node-in')?.selected).toBe(true)
+    expect(nodes.find(node => node.id === 'node-out')?.selected).toBe(false)
+    expect(selectedNodeIdsRef.current).toEqual(['node-in'])
+    expect(selectedNodeIdsState.value).toEqual(['node-in'])
+  })
+
+  it('drops out-of-scope selected nodes during shift marquee selection outside spaces', () => {
+    let nodes = [
+      createNode('node-in', { x: 40, y: 40, selected: true }),
+      createNode('node-out', { x: 420, y: 40, selected: false }),
+    ]
+    const selectedNodeIdsRef = { current: ['node-in'] }
+    const selectedSpaceIdsRef = { current: [] as string[] }
+    const selectedNodeIdsState = createStateSetter<string[]>(['node-in'])
+    const selectedSpaceIdsState = createStateSetter<string[]>([])
+    const spaces: WorkspaceSpaceState[] = [
+      {
+        id: 'space-a',
+        name: 'Space A',
+        directoryPath: '',
+        nodeIds: ['node-in'],
+        rect: {
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 240,
+        },
+      },
+    ]
+
+    applySelectionDraft({
+      draft: createDraft({
+        startX: 360,
+        startY: 0,
+        currentX: 640,
+        currentY: 160,
+        toggleSelection: true,
+        selectedNodeIdsAtStart: ['node-in'],
+        startSpaceId: null,
+      }),
+      reactFlow: identityReactFlow,
+      spaces,
+      selectedNodeIdsRef,
+      selectedSpaceIdsRef,
+      setNodes: updater => {
+        nodes = updater(nodes)
+      },
+      setSelectedNodeIds: selectedNodeIdsState.set,
+      setSelectedSpaceIds: selectedSpaceIdsState.set,
+    })
+
+    expect(nodes.find(node => node.id === 'node-in')?.selected).toBe(false)
+    expect(nodes.find(node => node.id === 'node-out')?.selected).toBe(true)
+    expect(selectedNodeIdsRef.current).toEqual(['node-out'])
+    expect(selectedNodeIdsState.value).toEqual(['node-out'])
+  })
 })

@@ -90,6 +90,7 @@ export function applySelectionDraft({
 }): void {
   const draftRect = resolveSelectionDraftRect(reactFlow, draft)
 
+  const draftScope = draft.startSpaceId ?? null
   const selectionIsInSpace = Boolean(draft.startSpaceId)
   const spaceAtStart = selectionIsInSpace
     ? (spaces.find(space => space.id === draft.startSpaceId) ?? null)
@@ -152,6 +153,15 @@ export function applySelectionDraft({
           y: node.position.y + node.data.height / 2,
         }
 
+        const nodeScope =
+          spaces.find(space => {
+            if (!space.rect) {
+              return false
+            }
+
+            return isPointInsideRect(nodeCenter, space.rect)
+          })?.id ?? null
+
         const intersects = rectIntersects(nodeRect, draftRect)
 
         const allowedBySpace = selectionIsInSpace
@@ -162,7 +172,7 @@ export function applySelectionDraft({
         let isSelected = intersectsSelectableArea
 
         if (draft.toggleSelection) {
-          isSelected = selectedAtStart.has(node.id)
+          isSelected = nodeScope === draftScope && selectedAtStart.has(node.id)
           if (intersectsSelectableArea) {
             isSelected = !isSelected
           }

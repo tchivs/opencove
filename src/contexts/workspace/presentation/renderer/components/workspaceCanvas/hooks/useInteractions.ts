@@ -101,6 +101,7 @@ export function useWorkspaceCanvasInteractions({
     setSelectedSpaceIds,
     selectedNodeIdsRef,
     selectedSpaceIdsRef,
+    spacesRef,
   })
 
   const clearNodeSelection = useCallback(() => {

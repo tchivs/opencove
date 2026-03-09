@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useStoreApi, type Node } from '@xyflow/react'
-import type { TerminalNodeData } from '../../../types'
+import type { TerminalNodeData, WorkspaceSpaceState } from '../../../types'
+import { isPointInsideRect } from './useSpaceOwnership.helpers'
 
 type SetNodes = (
   updater: (prevNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[],
@@ -13,12 +14,14 @@ export function useWorkspaceCanvasSelectNode({
   setSelectedSpaceIds,
   selectedNodeIdsRef,
   selectedSpaceIdsRef,
+  spacesRef,
 }: {
   setNodes: SetNodes
   setSelectedNodeIds: React.Dispatch<React.SetStateAction<string[]>>
   setSelectedSpaceIds: React.Dispatch<React.SetStateAction<string[]>>
   selectedNodeIdsRef: React.MutableRefObject<string[]>
   selectedSpaceIdsRef: React.MutableRefObject<string[]>
+  spacesRef: React.MutableRefObject<WorkspaceSpaceState[]>
 }): (nodeId: string, options?: { toggle?: boolean }) => void {
   const reactFlowStore = useStoreApi()
 
@@ -27,17 +30,47 @@ export function useWorkspaceCanvasSelectNode({
       const shouldToggle = options?.toggle === true
       let nextSelectedNodeIds = selectedNodeIdsRef.current
 
+      const resolveContainingSpaceId = (
+        node: Node<TerminalNodeData>,
+        spaces: WorkspaceSpaceState[],
+      ): string | null => {
+        const center = {
+          x: node.position.x + node.data.width / 2,
+          y: node.position.y + node.data.height / 2,
+        }
+
+        for (const space of spaces) {
+          if (!space.rect) {
+            continue
+          }
+
+          if (isPointInsideRect(center, space.rect)) {
+            return space.id
+          }
+        }
+
+        return null
+      }
+
       setNodes(
         prevNodes => {
           let hasChanged = false
 
           if (shouldToggle) {
             const toggledSelectedIds: string[] = []
+            const spaces = spacesRef.current
+            const targetNode = prevNodes.find(node => node.id === nodeId) ?? null
+            const targetScope = targetNode ? resolveContainingSpaceId(targetNode, spaces) : null
 
             const nextNodes = prevNodes.map(node => {
               let nextSelected = node.selected
+              const isInScope = resolveContainingSpaceId(node, spaces) === targetScope
 
-              if (node.id === nodeId) {
+              if (!isInScope) {
+                nextSelected = false
+              }
+
+              if (isInScope && node.id === nodeId) {
                 nextSelected = !node.selected
               }
 
@@ -110,6 +143,7 @@ export function useWorkspaceCanvasSelectNode({
       reactFlowStore,
       selectedNodeIdsRef,
       selectedSpaceIdsRef,
+      spacesRef,
       setNodes,
       setSelectedNodeIds,
       setSelectedSpaceIds,

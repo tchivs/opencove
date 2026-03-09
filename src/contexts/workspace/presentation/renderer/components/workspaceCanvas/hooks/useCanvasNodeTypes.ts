@@ -39,6 +39,7 @@ export function useWorkspaceCanvasComposedNodeTypes({
       setSelectedSpaceIds,
       selectedNodeIdsRef,
       selectedSpaceIdsRef,
+      spacesRef,
     })
 
   return useWorkspaceCanvasNodeTypes({
