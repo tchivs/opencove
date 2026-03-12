@@ -130,7 +130,12 @@ export function useWorkspaceCanvasSpaceOwnership({
             return { ...space, nodeIds: filtered }
           }
 
-          return { ...space, nodeIds: [...new Set([...filtered, ...nodeIds])] }
+          const incomingNodeIds = nodeIds.filter(nodeId => !space.nodeIds.includes(nodeId))
+          if (incomingNodeIds.length === 0) {
+            return space
+          }
+
+          return { ...space, nodeIds: [...space.nodeIds, ...incomingNodeIds] }
         }),
       )
 
