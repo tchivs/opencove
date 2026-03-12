@@ -19,6 +19,8 @@ OpenCove 是一款面向 AI 时代的**空间化开发工作台**。它打破了
 
 在这里，你的 **AI Agents（如 Claude Code / Codex）**、**终端（Terminals）**、**任务（Tasks）** 以及 **笔记（Notes）** 都可以同处于一个视觉平面。你可以将人类的思考规划与 Agent 的自动执行进行空间化的组织，让一切工作流直观可见。
 
+<img src="./assets/images/opencove_app_preview_readme.jpg" alt="OpenCove App Preview" width="100%" />
+
 ## ✨ 核心特性
 
 - **🌌 无限空间画布**：抛弃拥挤的多面板布局（Panes/Tabs），自由摆放你的终端、代码、文档和各类 Agent 窗口，构建全局视野。

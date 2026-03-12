@@ -19,6 +19,8 @@ OpenCove is a **spatial development workspace** built for the AI era. It reimagi
 
 Here, your **AI Agents (like Claude Code / Codex)**, **Terminals**, **Tasks**, and **Notes** exist on the same visual plane. By organizing human intuition and agent-driven automation spatially, OpenCove allows you to see the true context of your work at all times.
 
+<img src="./assets/images/opencove_app_preview_readme.jpg" alt="OpenCove App Preview" width="100%" />
+
 ## ✨ Highlights
 
 - **🌌 Infinite Spatial Canvas**: Break free from rigid layouts. Freely arrange terminals, docs, and agent interfaces to construct a holistic view of your workflow.
