@@ -32,7 +32,6 @@ interface TaskNodeProps {
   priority: TaskPriority
   tags: string[]
   isEnriching: boolean
-  linkedAgentTitle: string | null
   linkedAgentNode: {
     nodeId: string
     title: string
@@ -65,7 +64,6 @@ export function TaskNode({
   priority,
   tags,
   isEnriching,
-  linkedAgentTitle,
   linkedAgentNode,
   agentSessions,
   currentDirectory,
@@ -127,8 +125,6 @@ export function TaskNode({
 
     setRequirementDraft(requirement)
   }, [isRequirementEditing, requirement])
-
-  const resolvedLinkedAgentTitle = linkedAgentTitle ?? linkedAgentNode?.title ?? null
 
   const handleResizePointerDown = useCallback(
     (axis: ResizeAxis) => (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -385,10 +381,6 @@ export function TaskNode({
           ) : (
             <span className="task-node__tag task-node__tag--empty">No tags</span>
           )}
-        </span>
-
-        <span className="task-node__linked-agent" data-testid="task-node-linked-agent">
-          {resolvedLinkedAgentTitle ? `Agent · ${resolvedLinkedAgentTitle}` : 'Agent · Unassigned'}
         </span>
       </div>
 

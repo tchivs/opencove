@@ -47,7 +47,6 @@ describe('TaskNode agent sessions', () => {
         tags={[]}
         createdAt={null}
         updatedAt={null}
-        linkedAgentTitle={null}
         linkedAgentNode={{
           nodeId: 'agent-1',
           title: 'codex · gpt-5.2-codex',
@@ -114,7 +113,6 @@ describe('TaskNode agent sessions', () => {
         tags={[]}
         createdAt={null}
         updatedAt={null}
-        linkedAgentTitle={null}
         linkedAgentNode={null}
         agentSessions={sessions}
         currentDirectory="/repo"

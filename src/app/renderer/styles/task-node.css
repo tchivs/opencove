@@ -217,17 +217,6 @@
   border-style: dashed;
 }
 
-.task-node__linked-agent {
-  margin-left: auto;
-  max-width: 55%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: calc(10px * var(--cove-ui-font-scale));
-  color: rgba(168, 189, 230, 0.95);
-}
-
 .task-node__content {
   flex: 1;
   min-height: 0;

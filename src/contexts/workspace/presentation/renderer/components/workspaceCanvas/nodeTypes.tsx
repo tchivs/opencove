@@ -270,7 +270,6 @@ export function useWorkspaceCanvasNodeTypes({
               startedAt: linkedAgentNode.data.startedAt,
             }
           : null
-      const linkedAgentTitle = linkedAgentSummary?.title ?? null
 
       return (
         <TaskNode
@@ -280,7 +279,6 @@ export function useWorkspaceCanvasNodeTypes({
           priority={data.task.priority}
           tags={data.task.tags}
           isEnriching={data.task.isEnriching === true}
-          linkedAgentTitle={linkedAgentTitle}
           linkedAgentNode={linkedAgentSummary}
           agentSessions={data.task.agentSessions ?? []}
           currentDirectory={currentDirectory}
