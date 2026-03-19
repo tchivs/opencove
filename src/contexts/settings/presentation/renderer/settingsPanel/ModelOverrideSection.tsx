@@ -62,7 +62,7 @@ export function ModelOverrideSection(props: {
         return (
           <div className="settings-provider-card" key={provider}>
             <div className="settings-provider-card__header">
-              <strong style={{ fontSize: '14px', color: '#fff' }}>
+              <strong className="settings-provider-card__title">
                 {AGENT_PROVIDER_LABEL[provider]}
               </strong>
             </div>
@@ -104,8 +104,7 @@ export function ModelOverrideSection(props: {
                       {customOptions.includes(model) && (
                         <button
                           type="button"
-                          className="secondary"
-                          style={{ padding: '2px 8px', fontSize: '11px' }}
+                          className="secondary settings-list-item__remove"
                           onClick={() => onRemoveCustomModelOption(provider, model)}
                         >
                           {t('common.remove')}
@@ -138,7 +137,7 @@ export function ModelOverrideSection(props: {
             )}
 
             {modelCatalog.error && (
-              <div style={{ marginTop: '12px', fontSize: '11px', color: '#ff4d4d' }}>
+              <div className="settings-provider-card__error">
                 {t('settingsPanel.models.modelError', { message: modelCatalog.error })}
               </div>
             )}

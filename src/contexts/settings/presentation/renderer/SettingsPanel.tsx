@@ -10,6 +10,7 @@ import {
   type CanvasInputMode,
   type TaskTitleProvider,
   type UiLanguage,
+  type UiTheme,
 } from '@contexts/settings/domain/agentSettings'
 import { AgentSection } from './settingsPanel/AgentSection'
 import { CanvasSection } from './settingsPanel/CanvasSection'
@@ -85,6 +86,7 @@ export function SettingsPanel({
   const updateAgentProviderOrder = (providers: AgentProvider[]): void =>
     onChange({ ...settings, agentProviderOrder: providers })
   const updateLanguage = (language: UiLanguage): void => onChange({ ...settings, language })
+  const updateUiTheme = (uiTheme: UiTheme): void => onChange({ ...settings, uiTheme })
   const updateAgentFullAccess = (enabled: boolean): void =>
     onChange({ ...settings, agentFullAccess: enabled })
   const updateDefaultTerminalProfileId = (profileId: string | null): void =>
@@ -290,7 +292,16 @@ export function SettingsPanel({
           </div>
           <div className="settings-panel__content" ref={contentRef}>
             {activePageId === 'general' ? (
-              <GeneralSection language={settings.language} onChangeLanguage={updateLanguage} />
+              <GeneralSection
+                language={settings.language}
+                uiTheme={settings.uiTheme}
+                uiFontSize={settings.uiFontSize}
+                terminalFontSize={settings.terminalFontSize}
+                onChangeLanguage={updateLanguage}
+                onChangeUiTheme={updateUiTheme}
+                onChangeUiFontSize={updateUiFontSize}
+                onChangeTerminalFontSize={updateTerminalFontSize}
+              />
             ) : null}
 
             {activePageId === 'agent' ? (
@@ -321,8 +332,6 @@ export function SettingsPanel({
                 canvasInputMode={settings.canvasInputMode}
                 normalizeZoomOnTerminalClick={settings.normalizeZoomOnTerminalClick}
                 defaultTerminalWindowScalePercent={settings.defaultTerminalWindowScalePercent}
-                terminalFontSize={settings.terminalFontSize}
-                uiFontSize={settings.uiFontSize}
                 defaultTerminalProfileId={settings.defaultTerminalProfileId}
                 terminalProfiles={terminalProfiles}
                 detectedDefaultTerminalProfileId={detectedDefaultTerminalProfileId}
@@ -330,8 +339,6 @@ export function SettingsPanel({
                 onChangeDefaultTerminalProfileId={updateDefaultTerminalProfileId}
                 onChangeNormalizeZoomOnTerminalClick={updateNormalizeZoomOnTerminalClick}
                 onChangeDefaultTerminalWindowScalePercent={updateDefaultTerminalWindowScalePercent}
-                onChangeTerminalFontSize={updateTerminalFontSize}
-                onChangeUiFontSize={updateUiFontSize}
               />
             ) : null}
 

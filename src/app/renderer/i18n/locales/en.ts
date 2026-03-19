@@ -107,6 +107,15 @@ export const en = {
       title: 'General',
       languageLabel: 'Display Language',
       languageHelp: 'Language used for the OpenCove interface.',
+      uiThemeLabel: 'Appearance',
+      uiThemeHelp: 'Choose how OpenCove looks.',
+      uiTheme: {
+        system: 'System (Auto)',
+        light: 'Light',
+        dark: 'Dark',
+      },
+      interfaceFontSize: 'Interface Font Size',
+      terminalFontSize: 'Terminal Font Size',
     },
     agent: {
       title: 'Agent',
@@ -120,7 +129,7 @@ export const en = {
       fullAccessHelp: 'Disable sandbox and manual approvals for agents.',
     },
     canvas: {
-      title: 'Canvas & UI',
+      title: 'Canvas',
       inputModeLabel: 'Input Mode',
       inputModeHelp: 'How interactions are handled on the canvas.',
       terminalProfileLabel: 'Terminal Environment',
@@ -134,8 +143,6 @@ export const en = {
         mouse: 'Mouse',
       },
       initialWindowSize: 'Initial Window Size',
-      terminalFontSize: 'Terminal Font Size',
-      interfaceFontSize: 'Interface Font Size',
       autoZoomLabel: 'Auto-zoom on Click',
       autoZoomHelp: 'Zoom to 100% when a node is clicked.',
     },

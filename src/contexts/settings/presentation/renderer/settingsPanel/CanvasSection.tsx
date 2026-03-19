@@ -3,11 +3,7 @@ import { useTranslation } from '@app/renderer/i18n'
 import {
   CANVAS_INPUT_MODES,
   MAX_DEFAULT_TERMINAL_WINDOW_SCALE_PERCENT,
-  MAX_TERMINAL_FONT_SIZE,
-  MAX_UI_FONT_SIZE,
   MIN_DEFAULT_TERMINAL_WINDOW_SCALE_PERCENT,
-  MIN_TERMINAL_FONT_SIZE,
-  MIN_UI_FONT_SIZE,
   type CanvasInputMode,
 } from '@contexts/settings/domain/agentSettings'
 import { getCanvasInputModeLabel } from '@app/renderer/i18n/labels'
@@ -17,8 +13,6 @@ export function CanvasSection(props: {
   canvasInputMode: CanvasInputMode
   normalizeZoomOnTerminalClick: boolean
   defaultTerminalWindowScalePercent: number
-  terminalFontSize: number
-  uiFontSize: number
   defaultTerminalProfileId: string | null
   terminalProfiles: TerminalProfile[]
   detectedDefaultTerminalProfileId: string | null
@@ -26,16 +20,12 @@ export function CanvasSection(props: {
   onChangeDefaultTerminalProfileId: (profileId: string | null) => void
   onChangeNormalizeZoomOnTerminalClick: (enabled: boolean) => void
   onChangeDefaultTerminalWindowScalePercent: (percent: number) => void
-  onChangeTerminalFontSize: (size: number) => void
-  onChangeUiFontSize: (size: number) => void
 }): React.JSX.Element {
   const { t } = useTranslation()
   const {
     canvasInputMode,
     normalizeZoomOnTerminalClick,
     defaultTerminalWindowScalePercent,
-    terminalFontSize,
-    uiFontSize,
     defaultTerminalProfileId,
     terminalProfiles,
     detectedDefaultTerminalProfileId,
@@ -43,8 +33,6 @@ export function CanvasSection(props: {
     onChangeDefaultTerminalProfileId,
     onChangeNormalizeZoomOnTerminalClick,
     onChangeDefaultTerminalWindowScalePercent,
-    onChangeTerminalFontSize,
-    onChangeUiFontSize,
   } = props
   const selectedProfileId = terminalProfiles.some(
     profile => profile.id === defaultTerminalProfileId,
@@ -133,41 +121,9 @@ export function CanvasSection(props: {
               onChangeDefaultTerminalWindowScalePercent(Number(event.target.value))
             }
           />
-          <span style={{ fontSize: '12px', color: '#666' }}>{t('common.percentUnit')}</span>
-        </div>
-      </div>
-
-      <div className="settings-panel__row">
-        <div className="settings-panel__row-label">
-          <strong>{t('settingsPanel.canvas.terminalFontSize')}</strong>
-        </div>
-        <div className="settings-panel__control" style={{ alignItems: 'center', gap: '8px' }}>
-          <input
-            style={{ width: '80px' }}
-            type="number"
-            min={MIN_TERMINAL_FONT_SIZE}
-            max={MAX_TERMINAL_FONT_SIZE}
-            value={terminalFontSize}
-            onChange={event => onChangeTerminalFontSize(Number(event.target.value))}
-          />
-          <span style={{ fontSize: '12px', color: '#666' }}>{t('common.pixelUnit')}</span>
-        </div>
-      </div>
-
-      <div className="settings-panel__row">
-        <div className="settings-panel__row-label">
-          <strong>{t('settingsPanel.canvas.interfaceFontSize')}</strong>
-        </div>
-        <div className="settings-panel__control" style={{ alignItems: 'center', gap: '8px' }}>
-          <input
-            style={{ width: '80px' }}
-            type="number"
-            min={MIN_UI_FONT_SIZE}
-            max={MAX_UI_FONT_SIZE}
-            value={uiFontSize}
-            onChange={event => onChangeUiFontSize(Number(event.target.value))}
-          />
-          <span style={{ fontSize: '12px', color: '#666' }}>{t('common.pixelUnit')}</span>
+          <span style={{ fontSize: '12px', color: 'var(--cove-text-muted)' }}>
+            {t('common.percentUnit')}
+          </span>
         </div>
       </div>
 
