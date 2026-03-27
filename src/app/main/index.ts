@@ -4,12 +4,16 @@ import { fileURLToPath } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { hydrateCliEnvironmentForAppLaunch } from '../../platform/os/CliEnvironment'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
+import { registerControlSurfaceServer } from './controlSurface/registerControlSurfaceServer'
 import { setRuntimeIconTestState } from './iconTestHarness'
 import { resolveRuntimeIconPath } from './runtimeIcon'
 import { resolveTitleBarOverlay } from './ipc/registerWindowChromeIpcHandlers'
 import { shouldEnableWaylandIme } from './waylandIme'
+import { createApprovedWorkspaceStore } from '../../contexts/workspace/infrastructure/approval/ApprovedWorkspaceStore'
+import { createPtyRuntime } from '../../contexts/terminal/presentation/main-ipc/runtime'
 
 let ipcDisposable: ReturnType<typeof registerIpcHandlers> | null = null
+let controlSurfaceDisposable: ReturnType<typeof registerControlSurfaceServer> | null = null
 const APP_USER_DATA_DIRECTORY_NAME = 'opencove'
 const OPENCOVE_APP_USER_MODEL_ID = 'dev.deadwave.opencove'
 
@@ -375,7 +379,13 @@ app.whenReady().then(() => {
     return
   }
 
-  ipcDisposable = registerIpcHandlers()
+  const approvedWorkspaces = createApprovedWorkspaceStore()
+  const ptyRuntime = createPtyRuntime()
+
+  ipcDisposable = registerIpcHandlers({ approvedWorkspaces, ptyRuntime })
+  if (process.env.NODE_ENV !== 'test') {
+    controlSurfaceDisposable = registerControlSurfaceServer({ approvedWorkspaces, ptyRuntime })
+  }
 
   createWindow()
 
@@ -399,4 +409,7 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   ipcDisposable?.dispose()
   ipcDisposable = null
+
+  controlSurfaceDisposable?.dispose()
+  controlSurfaceDisposable = null
 })
