@@ -19,6 +19,7 @@ import type {
   StatInMountInput,
   StatInput,
 } from '../../../../shared/contracts/dto'
+import { normalizeReadFileBytesResult } from '../../../../shared/contracts/dto/filesystemBytes'
 import type { ControlSurface } from '../controlSurface'
 import type { WorkerTopologyStore } from '../topology/topologyStore'
 import {
@@ -71,13 +72,19 @@ export function registerFilesystemMountReadHandlers(
         debugMessage: 'filesystem.readFileBytesInMount uri is outside mount root',
       })
 
-      if (target.endpointId !== 'local') {
-        throw createAppError('common.unavailable', {
-          debugMessage: 'filesystem.readFileBytesInMount is unavailable for remote mounts.',
-        })
+      if (target.endpointId === 'local') {
+        return await readFileBytesUseCase(deps.port, payload satisfies ReadFileBytesInput)
       }
 
-      return await readFileBytesUseCase(deps.port, payload satisfies ReadFileBytesInput)
+      const result = await invokeRemoteValue<unknown>({
+        topology: deps.topology,
+        endpointId: target.endpointId,
+        kind: 'query',
+        id: 'filesystem.readFileBytes',
+        payload: { uri: payload.uri } satisfies ReadFileBytesInput,
+      })
+
+      return normalizeReadFileBytesResult(result, 'filesystem.readFileBytes')
     },
     defaultErrorCode: 'filesystem.read_file_bytes_failed',
   })

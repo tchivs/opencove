@@ -11,6 +11,7 @@ import type {
   StatInput,
   WriteFileTextInput,
 } from '@shared/contracts/dto'
+import { normalizeReadFileBytesResult } from '@shared/contracts/dto'
 
 export interface MountAwareFilesystemApi {
   copyEntry: (payload: CopyEntryInput) => Promise<void>
@@ -23,40 +24,6 @@ export interface MountAwareFilesystemApi {
   renameEntry: (payload: RenameEntryInput) => Promise<void>
   stat: (payload: StatInput) => Promise<FileSystemStat>
   writeFileText: (payload: WriteFileTextInput) => Promise<void>
-}
-
-function normalizeReadFileBytesResult(result: unknown): ReadFileBytesResult {
-  if (
-    result &&
-    typeof result === 'object' &&
-    'bytes' in result &&
-    (result as { bytes: unknown }).bytes instanceof Uint8Array
-  ) {
-    return result as ReadFileBytesResult
-  }
-
-  const rawBytes =
-    result && typeof result === 'object' && 'bytes' in result
-      ? (result as { bytes: unknown }).bytes
-      : null
-
-  if (Array.isArray(rawBytes)) {
-    return {
-      bytes: Uint8Array.from(rawBytes),
-    }
-  }
-
-  if (rawBytes && typeof rawBytes === 'object') {
-    const numericValues = Object.entries(rawBytes as Record<string, unknown>)
-      .sort((left, right) => Number(left[0]) - Number(right[0]))
-      .map(([, value]) => Number(value))
-
-    return {
-      bytes: Uint8Array.from(numericValues),
-    }
-  }
-
-  throw new Error('Invalid binary file payload.')
 }
 
 function resolveControlSurfaceInvoke(): ((request: unknown) => Promise<unknown>) | null {
@@ -73,12 +40,6 @@ export function resolveFilesystemApiForMount(
 
   if (mountId && controlSurfaceInvoke) {
     return {
-      stat: async ({ uri }) =>
-        await window.opencoveApi.controlSurface.invoke({
-          kind: 'query',
-          id: 'filesystem.statInMount',
-          payload: { mountId, uri },
-        }),
       readFileBytes: async ({ uri }) =>
         normalizeReadFileBytesResult(
           await window.opencoveApi.controlSurface.invoke({
@@ -86,7 +47,14 @@ export function resolveFilesystemApiForMount(
             id: 'filesystem.readFileBytesInMount',
             payload: { mountId, uri },
           }),
+          'filesystem.readFileBytesInMount',
         ),
+      stat: async ({ uri }) =>
+        await window.opencoveApi.controlSurface.invoke({
+          kind: 'query',
+          id: 'filesystem.statInMount',
+          payload: { mountId, uri },
+        }),
       readFileText: async ({ uri }) =>
         await window.opencoveApi.controlSurface.invoke({
           kind: 'query',

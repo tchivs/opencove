@@ -228,6 +228,15 @@ describe('Control Surface HTTP server (multi-endpoint orchestration)', () => {
       expect(isEnvelopeErr(statRes.data)).toBe(true)
       expect(statRes.data.error.code).toBe('worker.unavailable')
 
+      const bytesRes = await invoke(baseUrl, 'home-token', {
+        kind: 'query',
+        id: 'filesystem.readFileBytesInMount',
+        payload: { mountId, uri: toFileUri('/tmp/image.png') },
+      })
+      expect(bytesRes.status, JSON.stringify(bytesRes.data)).toBe(200)
+      expect(isEnvelopeErr(bytesRes.data)).toBe(true)
+      expect(bytesRes.data.error.code).toBe('worker.unavailable')
+
       const spawnRes = await invoke(baseUrl, 'home-token', {
         kind: 'command',
         id: 'pty.spawnInMount',
