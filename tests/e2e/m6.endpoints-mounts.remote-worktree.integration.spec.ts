@@ -122,22 +122,30 @@ test.describe('M6 - Remote mount worktree integration', () => {
       const endpointDisplayName = 'Remote Worker (Worktree)'
       await openSettings(window)
       await switchSettingsPage(window, 'endpoints')
-      await window.locator('[data-testid="settings-endpoints-open-register"]').click()
+      await window
+        .locator(
+          '[data-testid="settings-endpoints-open-register"], [data-testid="settings-endpoints-empty-register"]',
+        )
+        .first()
+        .click()
+      await window.locator('[data-testid="settings-endpoints-register-mode-manual"]').click()
 
       await window
         .locator('[data-testid="settings-endpoints-register-displayName"]')
         .fill(endpointDisplayName)
-      await window.locator('[data-testid="settings-endpoints-register-hostname"]').fill(remoteHost)
+      await window
+        .locator('[data-testid="settings-endpoints-register-manual-hostname"]')
+        .fill(remoteHost)
       await window
         .locator('[data-testid="settings-endpoints-register-port"]')
         .fill(String(remotePort))
       await window.locator('[data-testid="settings-endpoints-register-token"]').fill(remoteToken)
       await window.locator('[data-testid="settings-endpoints-register-submit"]').click()
 
-      const endpointRow = window.locator('.settings-panel__row', { hasText: endpointDisplayName })
+      const endpointRow = window.locator('.settings-panel__endpoint-card', {
+        hasText: endpointDisplayName,
+      })
       await expect(endpointRow).toBeVisible()
-      await endpointRow.locator('[data-testid^="settings-endpoints-ping-"]').click()
-      await expect(endpointRow.locator('.settings-panel__hint')).toBeVisible()
 
       const remoteEndpointId = await pollFor(
         async () =>

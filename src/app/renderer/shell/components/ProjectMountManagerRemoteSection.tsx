@@ -14,6 +14,7 @@ export function ProjectMountManagerRemoteSection({
   remoteRootPath,
   remoteMountName,
   canCreateRemote,
+  remoteStatusSlot,
   onChangeRemoteEndpointId,
   onChangeRemoteRootPath,
   onChangeRemoteMountName,
@@ -29,6 +30,7 @@ export function ProjectMountManagerRemoteSection({
   remoteRootPath: string
   remoteMountName: string
   canCreateRemote: boolean
+  remoteStatusSlot?: React.ReactNode
   onChangeRemoteEndpointId: (value: string) => void
   onChangeRemoteRootPath: (value: string) => void
   onChangeRemoteMountName: (value: string) => void
@@ -44,21 +46,44 @@ export function ProjectMountManagerRemoteSection({
 
   return (
     <>
-      <div className="cove-window__field-row">
-        <label>{t('projectMountManager.addRemoteLabel')}</label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-          {remoteEndpoints.length === 0 ? (
+      <div className="cove-window__section-card">
+        <div className="cove-window__section-card-header">
+          <div className="cove-window__section-card-heading">
+            <strong>{t('projectMountManager.addRemoteLabel')}</strong>
+          </div>
+          <div className="cove-window__section-card-actions">
             <button
               type="button"
               className="cove-window__action cove-window__action--ghost"
               disabled={isBusy}
-              data-testid="workspace-project-mount-open-endpoints"
+              data-testid="workspace-project-mount-refresh"
               onClick={() => {
-                onRequestOpenEndpoints()
+                onRefresh()
               }}
             >
-              {t('projectMountManager.openEndpointsAction')}
+              {t('common.refresh')}
             </button>
+          </div>
+        </div>
+        <div className="cove-window__stack cove-window__stack--tight">
+          {remoteEndpoints.length === 0 ? (
+            <div className="cove-window__empty-card">
+              <div className="cove-window__section-card-heading">
+                <strong>{t('addProjectWizard.noRemoteWorkersTitle')}</strong>
+                <span>{t('addProjectWizard.noRemoteWorkersHint')}</span>
+              </div>
+              <button
+                type="button"
+                className="cove-window__action cove-window__action--primary"
+                disabled={isBusy}
+                data-testid="workspace-project-mount-open-endpoints"
+                onClick={() => {
+                  onRequestOpenEndpoints()
+                }}
+              >
+                {t('projectMountManager.openEndpointsAction')}
+              </button>
+            </div>
           ) : (
             <>
               <CoveSelect
@@ -71,7 +96,8 @@ export function ProjectMountManagerRemoteSection({
                 disabled={isBusy}
                 onChange={nextValue => onChangeRemoteEndpointId(nextValue)}
               />
-              <div style={{ display: 'flex', gap: 10 }}>
+              {remoteStatusSlot ?? null}
+              <div className="cove-window__path-row cove-window__path-row--single-action">
                 <input
                   className="cove-field"
                   type="text"
@@ -80,14 +106,12 @@ export function ProjectMountManagerRemoteSection({
                   disabled={isBusy}
                   placeholder={t('projectMountManager.remoteRootPlaceholder')}
                   data-testid="workspace-project-mount-remote-root"
-                  style={{ flex: 1 }}
                 />
                 <button
                   type="button"
                   className="cove-window__action cove-window__action--ghost"
                   disabled={isBusy || remoteEndpointId.trim().length === 0}
                   data-testid="workspace-project-mount-remote-browse"
-                  style={{ flexShrink: 0 }}
                   onClick={() => {
                     const endpointId = remoteEndpointId.trim()
                     if (endpointId.length === 0) {
@@ -113,7 +137,7 @@ export function ProjectMountManagerRemoteSection({
                 placeholder={t('projectMountManager.remoteNamePlaceholder')}
                 data-testid="workspace-project-mount-remote-name"
               />
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div className="cove-window__button-row cove-window__button-row--end">
                 <button
                   type="button"
                   className="cove-window__action cove-window__action--primary"
@@ -124,17 +148,6 @@ export function ProjectMountManagerRemoteSection({
                   }}
                 >
                   {t('common.add')}
-                </button>
-                <button
-                  type="button"
-                  className="cove-window__action cove-window__action--ghost"
-                  disabled={isBusy}
-                  data-testid="workspace-project-mount-refresh"
-                  onClick={() => {
-                    onRefresh()
-                  }}
-                >
-                  {t('common.refresh')}
                 </button>
               </div>
             </>
