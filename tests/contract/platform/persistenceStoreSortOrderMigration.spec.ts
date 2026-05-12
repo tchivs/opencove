@@ -34,7 +34,7 @@ const CURRENT_SCHEMA_COLUMNS = {
   // prettier-ignore
   nodes: ['id', 'workspace_id', 'session_id', 'title', 'title_pinned_by_user', 'position_x', 'position_y', 'width', 'height', 'kind', 'profile_id', 'runtime_kind', 'terminal_provider_hint', 'label_color_override', 'status', 'started_at', 'ended_at', 'exit_code', 'last_error', 'execution_directory', 'expected_directory', 'agent_json', 'task_json'],
   // prettier-ignore
-  workspace_spaces: ['id', 'workspace_id', 'name', 'directory_path', 'target_mount_id', 'label_color', 'rect_x', 'rect_y', 'rect_width', 'rect_height'],
+  workspace_spaces: ['id', 'workspace_id', 'name', 'directory_path', 'target_mount_id', 'parent_space_id', 'boundary_json', 'sort_order', 'label_color', 'rect_x', 'rect_y', 'rect_width', 'rect_height'],
   workspace_space_nodes: ['space_id', 'node_id', 'sort_order'],
   node_scrollback: ['node_id', 'scrollback', 'updated_at'],
   agent_node_placeholder_scrollback: ['node_id', 'scrollback', 'updated_at'],
